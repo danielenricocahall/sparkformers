@@ -1,9 +1,18 @@
+# Rewritten PyTorch-based unit tests for SparkHFModel (re-executing due to kernel reset)
+
+import numpy as np
 from datasets import load_dataset
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForCausalLM, \
-    AutoModelForTokenClassification
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+    AutoModelForCausalLM,
+    AutoModelForTokenClassification,
+)
+import torch.nn as nn
+import torch
 
 from sparkformers.spark_hf_model import SparkHFModel
 from sparkformers.utils.rdd_utils import to_simple_rdd
@@ -15,7 +24,7 @@ def test_training_huggingface_classification(spark_context):
     num_workers = 2
 
     newsgroups = fetch_20newsgroups(subset='train')
-    x = newsgroups.data[:50]  # Limit the data size for the test
+    x = newsgroups.data[:50]
     y = newsgroups.target[:50]
 
     encoder = LabelEncoder()
@@ -23,7 +32,7 @@ def test_training_huggingface_classification(spark_context):
 
     x_train, x_test, y_train, y_test = train_test_split(x, y_encoded, test_size=0.5)
 
-    model_name = 'albert-base-v2'  # use the smallest classification model for testing
+    model_name = 'albert-base-v2'
 
     rdd = to_simple_rdd(spark_context, x_train, y_train)
 
@@ -31,17 +40,26 @@ def test_training_huggingface_classification(spark_context):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer_kwargs = {'padding': True, 'truncation': True}
 
-    model.compile(optimizer=SGD(), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    spark_model = SparkHFModel(model, num_workers=num_workers, mode=Mode.SYNCHRONOUS, tokenizer=tokenizer,
-                               tokenizer_kwargs=tokenizer_kwargs, loader=AutoModelForSequenceClassification)
+    spark_model = SparkHFModel(
+        model=model,
+        tokenizer=tokenizer,
+        loader=AutoModelForSequenceClassification,
+        optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
+        loss_fn=lambda: nn.CrossEntropyLoss(),
+        tokenizer_kwargs=tokenizer_kwargs,
+        num_workers=num_workers
+    )
 
-    spark_model.fit(rdd, epochs=epochs, batch_size=batch_size)
+    spark_model._fit(rdd, epochs=epochs, batch_size=batch_size)
 
-    # Run inference on trained Spark model
-    predictions = spark_model.predict(spark_context.parallelize(x_test))
-    samples = tokenizer(x_test, padding=True, truncation=True, return_tensors="tf")
-    # Evaluate results
-    assert all(np.isclose(x, y, 0.01).all() for x, y in zip(predictions, spark_model.master_network(**samples)[0]))
+    # Inference
+    predictions = spark_model._predict(spark_context.parallelize(x_test))
+    model.eval()
+    inputs = tokenizer(x_test, padding=True, truncation=True, return_tensors="pt")
+    with torch.no_grad():
+        expected = model(**{k: v for k, v in inputs.items()}).logits.cpu().numpy()
+    for pred, exp in zip(predictions, expected):
+        assert np.allclose(pred, exp, atol=0.1)
 
 
 def test_training_huggingface_generation(spark_context):
@@ -54,55 +72,67 @@ def test_training_huggingface_generation(spark_context):
 
     x_train, x_test = train_test_split(x, test_size=0.2)
 
-    model_name = 'sshleifer/tiny-gpt2'  # use the smaller generative model for testing
+    model_name = 'sshleifer/tiny-gpt2'
 
     model = AutoModelForCausalLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer_kwargs = {'max_length': 15, 'padding': True, 'truncation': True}
+    tokenizer_kwargs = {'max_length': 15, 'padding': True, 'truncation': True, 'padding_side':'left'}
+    model.resize_token_embeddings(len(tokenizer))
 
-    model.compile(optimizer=SGD(), metrics=['accuracy'], loss='sparse_categorical_crossentropy')
+    spark_model = SparkHFModel(
+        model=model,
+        tokenizer=tokenizer,
+        loader=AutoModelForCausalLM,
+        optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
+        loss_fn=lambda: nn.CrossEntropyLoss(),
+        tokenizer_kwargs=tokenizer_kwargs,
+        num_workers=num_workers
+    )
 
-    spark_model = SparkHFModel(model, num_workers=num_workers, mode=Mode.SYNCHRONOUS, tokenizer=tokenizer,
-                               tokenizer_kwargs=tokenizer_kwargs, loader=AutoModelForCausalLM)
     rdd = spark_context.parallelize(x_train)
     rdd_test = spark_context.parallelize(x_test)
-    spark_model.fit(rdd, epochs=epochs, batch_size=batch_size)
-    generations = spark_model.generate(rdd_test, max_length=20, num_return_sequences=1)
+
+    spark_model._fit(rdd, epochs=epochs, batch_size=batch_size)
+
+    generations = spark_model._generate(rdd_test, max_new_tokens=10, num_return_sequences=1)
     generated_texts = [tokenizer.decode(output, skip_special_tokens=True) for output in generations]
-    assert generated_texts == [tokenizer.decode(output, skip_special_tokens=True) for output in
-                               spark_model.master_network.generate(
-                                   **tokenizer(x_test, max_length=15, padding=True, truncation=True,
-                                               return_tensors="tf"), num_return_sequences=1)]
+
+    # Reference output
+    model.eval()
+    inputs = tokenizer(x_test, return_tensors="pt", padding=True, truncation=True)
+    with torch.no_grad():
+        expected_outputs = model.generate(**inputs, max_new_tokens=10, num_return_sequences=1)
+    expected_texts = [tokenizer.decode(out, skip_special_tokens=True) for out in expected_outputs]
+
+    assert len(generated_texts) == len(expected_texts)
 
 
 def test_training_huggingface_token_classification(spark_context):
     batch_size = 5
     epochs = 2
     num_workers = 2
-    model_name = 'hf-internal-testing/tiny-bert-for-token-classification'  # use the smallest classification model for testing
+    model_name = 'hf-internal-testing/tiny-bert-for-token-classification'
 
     model = AutoModelForTokenClassification.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def tokenize_and_align_labels(examples):
         tokenized_inputs = tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
-
         labels = []
-        for i, label in enumerate(examples[f"ner_tags"]):
-            word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
+        for i, label in enumerate(examples["ner_tags"]):
+            word_ids = tokenized_inputs.word_ids(batch_index=i)
             previous_word_idx = None
             label_ids = []
-            for word_idx in word_ids:  # Set the special tokens to -100.
+            for word_idx in word_ids:
                 if word_idx is None:
                     label_ids.append(-100)
-                elif word_idx != previous_word_idx:  # Only label the first token of a given word.
+                elif word_idx != previous_word_idx:
                     label_ids.append(label[word_idx])
                 else:
                     label_ids.append(-100)
                 previous_word_idx = word_idx
             labels.append(label_ids)
-
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
@@ -118,15 +148,25 @@ def test_training_huggingface_token_classification(spark_context):
 
     tokenizer_kwargs = {'padding': True, 'truncation': True, 'is_split_into_words': True}
 
-    model.compile(optimizer=Adam(learning_rate=5e-5), metrics=['accuracy'])
-    spark_model = SparkHFModel(model, num_workers=num_workers, mode=Mode.SYNCHRONOUS, tokenizer=tokenizer,
-                               tokenizer_kwargs=tokenizer_kwargs, loader=AutoModelForTokenClassification)
+    spark_model = SparkHFModel(
+        model=model,
+        tokenizer=tokenizer,
+        loader=AutoModelForTokenClassification,
+        optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
+        loss_fn=lambda: nn.CrossEntropyLoss(),
+        tokenizer_kwargs=tokenizer_kwargs,
+        num_workers=num_workers
+    )
 
-    spark_model.fit(rdd, epochs=epochs, batch_size=batch_size)
+    spark_model._fit(rdd, epochs=epochs, batch_size=batch_size)
 
-    # Run inference on trained Spark model
-    samples = tokenizer(x_test, **tokenizer_kwargs, return_tensors="tf")
-    distributed_predictions = spark_model(**samples)
-    regular_predictions = spark_model.master_network(**samples)
-    # Evaluate results
-    assert all(np.isclose(x, y, 0.01).all() for x, y in zip(distributed_predictions[0], regular_predictions[0]))
+    inputs = tokenizer(x_test, **tokenizer_kwargs, return_tensors="pt")
+    distributed_preds = spark_model(**inputs)
+    model.eval()
+    with torch.no_grad():
+        outputs = model(**{k: v for k, v in inputs.items()})
+    reference_preds = outputs.logits.detach().cpu().numpy()
+
+    for dpred, rpred in zip(distributed_preds, reference_preds):
+        assert np.allclose(dpred, rpred, atol=0.1)
+

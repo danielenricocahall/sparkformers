@@ -43,7 +43,6 @@ class SparkHFModel:
         optimizer_fn = self.master_optimizer
         loss_fn = self.master_loss
         metrics = self.master_metrics
-        custom = self.custom_objects
         train_config = kwargs
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -97,7 +96,7 @@ class SparkHFModel:
                 model = loader.from_pretrained(model_dir).eval()
                 predictions = []
                 for batch in data:
-                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt", padding=True, truncation=True)
+                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
                     outputs = model(**inputs)
                     predictions.extend(outputs.logits.detach().cpu().numpy())
                 return zip(predictions, indices)
@@ -139,7 +138,7 @@ class SparkHFModel:
                 generations = []
 
                 for batch in data:
-                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt", padding=True, truncation=True)
+                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
                     outputs = model.generate(**inputs, **kwargs)
                     generations.extend(outputs.cpu().numpy())
                 return zip(generations, indices)
@@ -181,17 +180,34 @@ class SparkHFModel:
                 model_dir = tempfile.mkdtemp()
                 shutil.unpack_archive(zip_path, model_dir)
                 model = loader.from_pretrained(model_dir).eval()
+                tokenizer = self.tokenizer
+                tokenizer_kwargs = self.tokenizer_kwargs
+
                 outputs_list = []
 
                 for sample in partition:
-                    sample_dict = {key: torch.tensor([value]) for key, value in sample.items()}
-                    outputs = model(**sample_dict)
+                    # Tokenize if raw input
+                    if isinstance(sample, str) or isinstance(sample, list):
+                        inputs = tokenizer(sample, return_tensors="pt", **tokenizer_kwargs)
+                    elif isinstance(sample, dict):
+                        # If it's already tokenized, assume it's numeric data
+                        inputs = {
+                            k: torch.as_tensor(v).unsqueeze(0) if not torch.is_tensor(v) else v.unsqueeze(0)
+                            for k, v in sample.items()
+                        }
+                    else:
+                        raise ValueError(f"Unexpected sample type: {type(sample)}")
+
+                    with torch.no_grad():
+                        outputs = model(**inputs)
+
                     if hasattr(outputs, "logits"):
                         outputs_list.append(outputs.logits.detach().cpu().numpy())
                     elif hasattr(outputs, "sequences"):
                         outputs_list.append(outputs.sequences.detach().cpu().numpy())
                     else:
                         outputs_list.append(outputs.detach().cpu().numpy())
+
                 shutil.rmtree(model_dir)
                 return outputs_list
 
@@ -200,18 +216,36 @@ class SparkHFModel:
                 model_dir = tempfile.mkdtemp()
                 shutil.unpack_archive(zip_path, model_dir)
                 model = loader.from_pretrained(model_dir).eval()
+                tokenizer = self.tokenizer
+                tokenizer_kwargs = self.tokenizer_kwargs
+
                 data, indices = zip(*partition)
                 outputs_list = []
 
                 for sample in data:
-                    sample_dict = {key: torch.tensor([value]) for key, value in sample.items()}
-                    outputs = model(**sample_dict)
+                    # Tokenize raw text input
+                    if isinstance(sample, str) or isinstance(sample, list):
+                        inputs = tokenizer(sample, return_tensors="pt", **tokenizer_kwargs)
+                    elif isinstance(sample, dict):
+                        # If already tokenized: convert to batched tensors
+                        inputs = {
+                            k: torch.as_tensor(v).unsqueeze(0) if not torch.is_tensor(v) else v.unsqueeze(0)
+                            for k, v in sample.items()
+                        }
+                    else:
+                        raise ValueError(f"Unexpected sample type in _call_with_indices: {type(sample)}")
+
+                    with torch.no_grad():
+                        outputs = model(**inputs)
+
                     if hasattr(outputs, "logits"):
                         outputs_list.append(outputs.logits.detach().cpu().numpy())
                     elif hasattr(outputs, "sequences"):
                         outputs_list.append(outputs.sequences.detach().cpu().numpy())
                     else:
                         outputs_list.append(outputs.detach().cpu().numpy())
+
+                shutil.rmtree(model_dir)
                 return zip(outputs_list, indices)
 
         return self._call_and_collect(rdd, _call, _call_with_indices)
@@ -240,8 +274,7 @@ class SparkHFWorker:
         # Use appropriate training loop depending on task type
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
             x_train, y_train = zip(*data_iterator)
-            x_inputs = self.tokenizer(list(x_train), **self.tokenizer_kwargs, return_tensors="pt", padding=True,
-                                      truncation=True).to(self.device)
+            x_inputs = self.tokenizer(list(x_train), **self.tokenizer_kwargs, return_tensors="pt").to(self.device)
             y_train = torch.tensor(y_train).to(self.device)
             loss_fn = self.master_loss()
 
@@ -254,8 +287,7 @@ class SparkHFWorker:
 
         elif self.loader.__name__ == AutoModelForTokenClassification.__name__:
             x_train, y_train = zip(*data_iterator)
-            tokenized = self.tokenizer(list(x_train), **self.tokenizer_kwargs, return_tensors="pt", padding=True,
-                                       truncation=True)
+            tokenized = self.tokenizer(list(x_train), **self.tokenizer_kwargs, return_tensors="pt")
             max_len = tokenized['input_ids'].shape[1]
             y_train_padded = pad_labels(y_train, max_len, -100)
             labels = torch.tensor(y_train_padded).to(self.device)
@@ -271,8 +303,7 @@ class SparkHFWorker:
 
         elif self.loader.__name__ == AutoModelForCausalLM.__name__:
             x_train = list(data_iterator)
-            tokenized = self.tokenizer(x_train, **self.tokenizer_kwargs, return_tensors="pt", padding=True,
-                                       truncation=True)
+            tokenized = self.tokenizer(x_train, **self.tokenizer_kwargs, return_tensors="pt")
             input_ids = tokenized['input_ids'][:, :-1].to(self.device)
             labels = tokenized['input_ids'][:, 1:].to(self.device)
 
