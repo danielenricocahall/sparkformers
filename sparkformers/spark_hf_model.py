@@ -82,7 +82,7 @@ class SparkHFModel:
                 predictions = []
 
                 for batch in partition:
-                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt", padding=True, truncation=True)
+                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
                     outputs = model(**inputs)
                     predictions.extend(outputs.logits.detach().cpu().numpy())
                 shutil.rmtree(model_dir)
@@ -123,7 +123,7 @@ class SparkHFModel:
                 generations = []
 
                 for batch in partition:
-                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt", padding=True, truncation=True)
+                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
                     outputs = model.generate(**inputs, **kwargs)
                     generations.extend(outputs.cpu().numpy())
                 shutil.rmtree(model_dir)

@@ -1,6 +1,7 @@
 # Rewritten PyTorch-based unit tests for SparkHFModel (re-executing due to kernel reset)
 
 import numpy as np
+import pytest
 from datasets import load_dataset
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
@@ -17,11 +18,10 @@ import torch
 from sparkformers.spark_hf_model import SparkHFModel
 from sparkformers.utils.rdd_utils import to_simple_rdd
 
-
-def test_training_huggingface_classification(spark_context):
+@pytest.mark.parametrize("num_workers", [1, 2])
+def test_training_huggingface_classification(spark_context, num_workers):
     batch_size = 5
     epochs = 1
-    num_workers = 2
 
     newsgroups = fetch_20newsgroups(subset='train')
     x = newsgroups.data[:50]
@@ -61,11 +61,10 @@ def test_training_huggingface_classification(spark_context):
     for pred, exp in zip(predictions, expected):
         assert np.allclose(pred, exp, atol=0.1)
 
-
-def test_training_huggingface_generation(spark_context):
+@pytest.mark.parametrize("num_workers", [1, 2])
+def test_training_huggingface_generation(spark_context, num_workers):
     batch_size = 5
     epochs = 1
-    num_workers = 2
 
     newsgroups = fetch_20newsgroups(subset='train')
     x = newsgroups.data[:60]
@@ -107,11 +106,10 @@ def test_training_huggingface_generation(spark_context):
 
     assert len(generated_texts) == len(expected_texts)
 
-
-def test_training_huggingface_token_classification(spark_context):
+@pytest.mark.parametrize("num_workers", [1, 2])
+def test_training_huggingface_token_classification(spark_context, num_workers: int):
     batch_size = 5
     epochs = 2
-    num_workers = 2
     model_name = 'hf-internal-testing/tiny-bert-for-token-classification'
 
     model = AutoModelForTokenClassification.from_pretrained(model_name)
