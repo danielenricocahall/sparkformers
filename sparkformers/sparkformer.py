@@ -13,11 +13,12 @@ from transformers import (
     AutoModelForCausalLM,
 )
 
+from sparkformers.utils.rdd_utils import to_simple_rdd
 from sparkformers.utils.torch_utils import divide_by, subtract_params, get_param_diff
 from sparkformers.utils.hf_utils import pad_labels, load_model_from_zip
 
 
-class SparkHFModel:
+class SparkFormer:
     def __init__(
         self,
         model,
@@ -41,7 +42,13 @@ class SparkHFModel:
         self.num_workers = num_workers
         self.training_histories = []
 
-    def _fit(self, rdd: RDD, **kwargs):
+    def train(self, data: RDD, labels=None, **kwargs):
+        if isinstance(data, RDD):
+            rdd = data
+        elif labels is not None:
+            rdd = to_simple_rdd(data, labels)
+        else:
+            raise ValueError("Either supply `data` and `labels`, or an RDD.")
         optimizer_fn = self.master_optimizer
         loss_fn = self.master_loss
         metrics = self.master_metrics
@@ -52,7 +59,7 @@ class SparkHFModel:
             rdd.context.addFile(temp_dir, recursive=True)
             broadcast_dir = rdd.context.broadcast(temp_dir)
 
-            worker = SparkHFWorker(
+            worker = SparkFormerWorker(
                 train_config,
                 optimizer_fn,
                 loss_fn,
@@ -74,7 +81,7 @@ class SparkHFModel:
 
             self._master_network.load_state_dict(new_state)
 
-    def _predict(self, rdd: RDD) -> List[np.ndarray]:
+    def predict(self, rdd: RDD) -> List[np.ndarray]:
         tokenizer = self.tokenizer
         loader = self.loader
         tokenizer_kwargs = self.tokenizer_kwargs
@@ -224,7 +231,7 @@ class SparkHFModel:
         return self._call_and_collect(rdd, _call, _call_with_indices)
 
 
-class SparkHFWorker:
+class SparkFormerWorker:
     def __init__(
         self,
         train_config,
