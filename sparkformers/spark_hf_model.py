@@ -1,5 +1,3 @@
-# Full PyTorch-native rewrite of SparkHFModel and SparkHFWorker
-
 import shutil
 import tempfile
 from functools import partial
@@ -9,24 +7,28 @@ from typing import List, Callable
 import numpy as np
 import torch
 from pyspark import RDD, SparkFiles
-from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForCausalLM
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
+    AutoModelForCausalLM,
+)
 
 from sparkformers.utils.torch_utils import divide_by, subtract_params, get_param_diff
-from sparkformers.utils.hf_utils import pad_labels
+from sparkformers.utils.hf_utils import pad_labels, load_model_from_zip
 
 
 class SparkHFModel:
     def __init__(
-            self,
-            model,
-            tokenizer,
-            loader,
-            optimizer_fn,
-            loss_fn,
-            tokenizer_kwargs=None,
-            metrics=None,
-            custom_objects=None,
-            num_workers=None,
+        self,
+        model,
+        tokenizer,
+        loader,
+        optimizer_fn,
+        loss_fn,
+        tokenizer_kwargs=None,
+        metrics=None,
+        custom_objects=None,
+        num_workers=None,
     ):
         self._master_network = model
         self.tokenizer = tokenizer
@@ -50,9 +52,16 @@ class SparkHFModel:
             rdd.context.addFile(temp_dir, recursive=True)
             broadcast_dir = rdd.context.broadcast(temp_dir)
 
-            worker = SparkHFWorker(train_config, optimizer_fn, loss_fn, metrics,
-                                   temp_dir=broadcast_dir, tokenizer=self.tokenizer,
-                                   tokenizer_kwargs=self.tokenizer_kwargs, loader=self.loader)
+            worker = SparkHFWorker(
+                train_config,
+                optimizer_fn,
+                loss_fn,
+                metrics,
+                temp_dir=broadcast_dir,
+                tokenizer=self.tokenizer,
+                tokenizer_kwargs=self.tokenizer_kwargs,
+                loader=self.loader,
+            )
 
             training_outcomes = rdd.mapPartitions(worker.train).collect()
             new_state = self._master_network.state_dict()
@@ -75,12 +84,10 @@ class SparkHFModel:
             rdd.context.addFile(_zip_path)
 
             def _predict(partition):
-                zip_path = SparkFiles.get(_zip_path)
-                model_dir = tempfile.mkdtemp()
-                shutil.unpack_archive(zip_path, model_dir)
-                model = loader.from_pretrained(model_dir).eval()
+                model, model_dir = load_model_from_zip(
+                    SparkFiles.get(_zip_path), loader
+                )
                 predictions = []
-
                 for batch in partition:
                     inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
                     outputs = model(**inputs)
@@ -90,22 +97,16 @@ class SparkHFModel:
 
             def _predict_with_indices(partition):
                 data, indices = zip(*partition)
-                zip_path = SparkFiles.get(_zip_path)
-                model_dir = tempfile.mkdtemp()
-                shutil.unpack_archive(zip_path, model_dir)
-                model = loader.from_pretrained(model_dir).eval()
-                predictions = []
-                for batch in data:
-                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
-                    outputs = model(**inputs)
-                    predictions.extend(outputs.logits.detach().cpu().numpy())
+                predictions = _predict(data)
                 return zip(predictions, indices)
 
             return self._call_and_collect(rdd, _predict, _predict_with_indices)
 
     def _generate(self, rdd: RDD, **kwargs) -> List[np.ndarray]:
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
-            raise ValueError("This method is only for causal language models, not classification models.")
+            raise ValueError(
+                "This method is only for causal language models, not classification models."
+            )
 
         tokenizer = self.tokenizer
         loader = self.loader
@@ -116,10 +117,9 @@ class SparkHFModel:
             rdd.context.addFile(_zip_path)
 
             def _generate(partition):
-                zip_path = SparkFiles.get(_zip_path)
-                model_dir = tempfile.mkdtemp()
-                shutil.unpack_archive(zip_path, model_dir)
-                model = loader.from_pretrained(model_dir).eval()
+                model, model_dir = load_model_from_zip(
+                    SparkFiles.get(_zip_path), loader
+                )
                 generations = []
 
                 for batch in partition:
@@ -131,25 +131,19 @@ class SparkHFModel:
 
             def _generate_with_indices(partition):
                 data, indices = zip(*partition)
-                zip_path = SparkFiles.get(_zip_path)
-                model_dir = tempfile.mkdtemp()
-                shutil.unpack_archive(zip_path, model_dir)
-                model = loader.from_pretrained(model_dir).eval()
-                generations = []
-
-                for batch in data:
-                    inputs = tokenizer(batch, **tokenizer_kwargs, return_tensors="pt")
-                    outputs = model.generate(**inputs, **kwargs)
-                    generations.extend(outputs.cpu().numpy())
+                generations = _generate(data)
                 return zip(generations, indices)
 
             return self._call_and_collect(rdd, _generate, _generate_with_indices)
 
-    def _call_and_collect(self, rdd: RDD, predict_func: Callable, predict_with_indices_func: Callable) -> List[
-        np.ndarray]:
+    def _call_and_collect(
+        self, rdd: RDD, predict_func: Callable, predict_with_indices_func: Callable
+    ) -> List[np.ndarray]:
         if self.num_workers and self.num_workers > 1:
             rdd = rdd.zipWithIndex().repartition(self.num_workers)
-            predictions_and_indices = rdd.mapPartitions(partial(predict_with_indices_func))
+            predictions_and_indices = rdd.mapPartitions(
+                partial(predict_with_indices_func)
+            )
             predictions_sorted_by_index = predictions_and_indices.sortBy(lambda x: x[1])
             return predictions_sorted_by_index.map(lambda x: x[0]).collect()
         else:
@@ -166,8 +160,12 @@ class SparkHFModel:
 
     def __call__(self, *args, **kwargs):
         from pyspark.sql import SparkSession
+
         sc = SparkSession.builder.getOrCreate().sparkContext
-        inputs_list = [{key: kwargs[key][i] for key in kwargs} for i in range(len(next(iter(kwargs.values()))))]
+        inputs_list = [
+            {key: kwargs[key][i] for key in kwargs}
+            for i in range(len(next(iter(kwargs.values()))))
+        ]
         rdd = sc.parallelize(inputs_list)
         loader = self.loader
 
@@ -176,23 +174,36 @@ class SparkHFModel:
             rdd.context.addFile(_zip_path)
 
             def _call(partition):
-                zip_path = SparkFiles.get(_zip_path)
-                model_dir = tempfile.mkdtemp()
-                shutil.unpack_archive(zip_path, model_dir)
-                model = loader.from_pretrained(model_dir).eval()
+                model, model_dir = load_model_from_zip(
+                    SparkFiles.get(_zip_path), loader
+                )
                 tokenizer = self.tokenizer
                 tokenizer_kwargs = self.tokenizer_kwargs
+                outputs = process_partition(
+                    partition, tokenizer, model, tokenizer_kwargs
+                )
+                shutil.rmtree(model_dir)
+                return outputs
 
+            def _call_with_indices(partition):
+                data, indices = zip(*partition)
+                outputs = _call(data)
+                return zip(outputs, indices)
+
+            def process_partition(data, tokenizer, model, tokenizer_kwargs):
                 outputs_list = []
-
-                for sample in partition:
+                for sample in data:
                     # Tokenize if raw input
                     if isinstance(sample, str) or isinstance(sample, list):
-                        inputs = tokenizer(sample, return_tensors="pt", **tokenizer_kwargs)
+                        inputs = tokenizer(
+                            sample, return_tensors="pt", **tokenizer_kwargs
+                        )
                     elif isinstance(sample, dict):
                         # If it's already tokenized, assume it's numeric data
                         inputs = {
-                            k: torch.as_tensor(v).unsqueeze(0) if not torch.is_tensor(v) else v.unsqueeze(0)
+                            k: torch.as_tensor(v).unsqueeze(0)
+                            if not torch.is_tensor(v)
+                            else v.unsqueeze(0)
                             for k, v in sample.items()
                         }
                     else:
@@ -208,51 +219,23 @@ class SparkHFModel:
                     else:
                         outputs_list.append(outputs.detach().cpu().numpy())
 
-                shutil.rmtree(model_dir)
                 return outputs_list
-
-            def _call_with_indices(partition):
-                zip_path = SparkFiles.get(_zip_path)
-                model_dir = tempfile.mkdtemp()
-                shutil.unpack_archive(zip_path, model_dir)
-                model = loader.from_pretrained(model_dir).eval()
-                tokenizer = self.tokenizer
-                tokenizer_kwargs = self.tokenizer_kwargs
-
-                data, indices = zip(*partition)
-                outputs_list = []
-
-                for sample in data:
-                    # Tokenize raw text input
-                    if isinstance(sample, str) or isinstance(sample, list):
-                        inputs = tokenizer(sample, return_tensors="pt", **tokenizer_kwargs)
-                    elif isinstance(sample, dict):
-                        # If already tokenized: convert to batched tensors
-                        inputs = {
-                            k: torch.as_tensor(v).unsqueeze(0) if not torch.is_tensor(v) else v.unsqueeze(0)
-                            for k, v in sample.items()
-                        }
-                    else:
-                        raise ValueError(f"Unexpected sample type in _call_with_indices: {type(sample)}")
-
-                    with torch.no_grad():
-                        outputs = model(**inputs)
-
-                    if hasattr(outputs, "logits"):
-                        outputs_list.append(outputs.logits.detach().cpu().numpy())
-                    elif hasattr(outputs, "sequences"):
-                        outputs_list.append(outputs.sequences.detach().cpu().numpy())
-                    else:
-                        outputs_list.append(outputs.detach().cpu().numpy())
-
-                shutil.rmtree(model_dir)
-                return zip(outputs_list, indices)
 
         return self._call_and_collect(rdd, _call, _call_with_indices)
 
 
 class SparkHFWorker:
-    def __init__(self, train_config, master_optimizer, master_loss, master_metrics, temp_dir, tokenizer, tokenizer_kwargs, loader):
+    def __init__(
+        self,
+        train_config,
+        master_optimizer,
+        master_loss,
+        master_metrics,
+        temp_dir,
+        tokenizer,
+        tokenizer_kwargs,
+        loader,
+    ):
         self.tokenizer = tokenizer
         self.tokenizer_kwargs = tokenizer_kwargs
         self.temp_dir = temp_dir
@@ -271,10 +254,11 @@ class SparkHFWorker:
 
         optimizer = self.master_optimizer(model.parameters())
 
-        # Use appropriate training loop depending on task type
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
             x_train, y_train = zip(*data_iterator)
-            x_inputs = self.tokenizer(list(x_train), **self.tokenizer_kwargs, return_tensors="pt").to(self.device)
+            x_inputs = self.tokenizer(
+                list(x_train), **self.tokenizer_kwargs, return_tensors="pt"
+            ).to(self.device)
             y_train = torch.tensor(y_train).to(self.device)
             loss_fn = self.master_loss()
 
@@ -287,8 +271,10 @@ class SparkHFWorker:
 
         elif self.loader.__name__ == AutoModelForTokenClassification.__name__:
             x_train, y_train = zip(*data_iterator)
-            tokenized = self.tokenizer(list(x_train), **self.tokenizer_kwargs, return_tensors="pt")
-            max_len = tokenized['input_ids'].shape[1]
+            tokenized = self.tokenizer(
+                list(x_train), **self.tokenizer_kwargs, return_tensors="pt"
+            )
+            max_len = tokenized["input_ids"].shape[1]
             y_train_padded = pad_labels(y_train, max_len, -100)
             labels = torch.tensor(y_train_padded).to(self.device)
             tokenized = {k: v.to(self.device) for k, v in tokenized.items()}
@@ -296,16 +282,20 @@ class SparkHFWorker:
             loss_fn = self.master_loss()
             optimizer.zero_grad()
             outputs = model(**tokenized)
-            loss = loss_fn(outputs.logits.view(-1, outputs.logits.size(-1)), labels.view(-1))
+            loss = loss_fn(
+                outputs.logits.view(-1, outputs.logits.size(-1)), labels.view(-1)
+            )
             loss.backward()
             optimizer.step()
             history = {"loss": loss.item()}
 
         elif self.loader.__name__ == AutoModelForCausalLM.__name__:
             x_train = list(data_iterator)
-            tokenized = self.tokenizer(x_train, **self.tokenizer_kwargs, return_tensors="pt")
-            input_ids = tokenized['input_ids'][:, :-1].to(self.device)
-            labels = tokenized['input_ids'][:, 1:].to(self.device)
+            tokenized = self.tokenizer(
+                x_train, **self.tokenizer_kwargs, return_tensors="pt"
+            )
+            input_ids = tokenized["input_ids"][:, :-1].to(self.device)
+            labels = tokenized["input_ids"][:, 1:].to(self.device)
 
             optimizer.zero_grad()
             outputs = model(input_ids, labels=labels)
@@ -321,8 +311,6 @@ class SparkHFWorker:
 
 
 def save_and_zip_model(model, temp_dir):
-    # Save model to the temporary directory
     model.save_pretrained(temp_dir)
-    # Create a zip file of the model directory
-    zip_path = shutil.make_archive(temp_dir, 'zip', temp_dir)
+    zip_path = shutil.make_archive(temp_dir, "zip", temp_dir)
     return zip_path
