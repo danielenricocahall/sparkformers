@@ -1,0 +1,38 @@
+name: Python package
+
+on:
+  push:
+    branches:
+      - "**"
+      - "!gh-pages"
+    paths-ignore:
+      - '**/README.md'
+      - '**/CONTRIBUTING.md'
+      - 'docs/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Spark dependencies
+        run: |
+          sudo add-apt-repository -y ppa:openjdk-r/ppa
+          sudo apt-get -qq update
+          sudo apt-get install -y openjdk-8-jdk --no-install-recommends
+          sudo update-java-alternatives -s java-1.8.0-openjdk-amd64
+          export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+          export SPARK_LOCAL_IP=0.0.0.0
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Test with pytest
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          uv run pytest tests
