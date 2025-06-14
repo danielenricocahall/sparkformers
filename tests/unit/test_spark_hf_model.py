@@ -1,8 +1,14 @@
+from datasets import load_dataset
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from transformers import AutoTokenizer, TFAutoModelForSequenceClassification, TFAutoModelForCausalLM, \
-    TFAutoModelForTokenClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForCausalLM, \
+    AutoModelForTokenClassification
+
+from sparkformers.spark_hf_model import SparkHFModel
+from sparkformers.utils.rdd_utils import to_simple_rdd
+
+
 def test_training_huggingface_classification(spark_context):
     batch_size = 5
     epochs = 1
@@ -21,13 +27,13 @@ def test_training_huggingface_classification(spark_context):
 
     rdd = to_simple_rdd(spark_context, x_train, y_train)
 
-    model = TFAutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(np.unique(y_encoded)))
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(np.unique(y_encoded)))
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer_kwargs = {'padding': True, 'truncation': True}
 
     model.compile(optimizer=SGD(), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     spark_model = SparkHFModel(model, num_workers=num_workers, mode=Mode.SYNCHRONOUS, tokenizer=tokenizer,
-                               tokenizer_kwargs=tokenizer_kwargs, loader=TFAutoModelForSequenceClassification)
+                               tokenizer_kwargs=tokenizer_kwargs, loader=AutoModelForSequenceClassification)
 
     spark_model.fit(rdd, epochs=epochs, batch_size=batch_size)
 
@@ -50,7 +56,7 @@ def test_training_huggingface_generation(spark_context):
 
     model_name = 'sshleifer/tiny-gpt2'  # use the smaller generative model for testing
 
-    model = TFAutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer_kwargs = {'max_length': 15, 'padding': True, 'truncation': True}
@@ -58,7 +64,7 @@ def test_training_huggingface_generation(spark_context):
     model.compile(optimizer=SGD(), metrics=['accuracy'], loss='sparse_categorical_crossentropy')
 
     spark_model = SparkHFModel(model, num_workers=num_workers, mode=Mode.SYNCHRONOUS, tokenizer=tokenizer,
-                               tokenizer_kwargs=tokenizer_kwargs, loader=TFAutoModelForCausalLM)
+                               tokenizer_kwargs=tokenizer_kwargs, loader=AutoModelForCausalLM)
     rdd = spark_context.parallelize(x_train)
     rdd_test = spark_context.parallelize(x_test)
     spark_model.fit(rdd, epochs=epochs, batch_size=batch_size)
@@ -76,7 +82,7 @@ def test_training_huggingface_token_classification(spark_context):
     num_workers = 2
     model_name = 'hf-internal-testing/tiny-bert-for-token-classification'  # use the smallest classification model for testing
 
-    model = TFAutoModelForTokenClassification.from_pretrained(model_name)
+    model = AutoModelForTokenClassification.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def tokenize_and_align_labels(examples):
@@ -114,7 +120,7 @@ def test_training_huggingface_token_classification(spark_context):
 
     model.compile(optimizer=Adam(learning_rate=5e-5), metrics=['accuracy'])
     spark_model = SparkHFModel(model, num_workers=num_workers, mode=Mode.SYNCHRONOUS, tokenizer=tokenizer,
-                               tokenizer_kwargs=tokenizer_kwargs, loader=TFAutoModelForTokenClassification)
+                               tokenizer_kwargs=tokenizer_kwargs, loader=AutoModelForTokenClassification)
 
     spark_model.fit(rdd, epochs=epochs, batch_size=batch_size)
 
