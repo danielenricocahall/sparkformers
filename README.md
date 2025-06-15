@@ -1,5 +1,5 @@
 # Overview
-![img.png](logo.png)
+![img.png](https://github.com/danielenricocahall/sparkformers/blob/a379cb93334f6bbe70f3c9be6cff1f8b71a6be23/logo.png)
 Welcome to Sparkformers, where we offer distributed training of [Transformers](https://github.com/huggingface/transformers) models on [Spark](https://spark.apache.org/)!
 
 # Motivation / Purpose

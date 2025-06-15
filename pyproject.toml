@@ -1,6 +1,6 @@
 [project]
 name = "sparkformers"
-version = "0.0.0"
+version = "0.0.1"
 description = "Distributed deep learning for Hugging Face Transformers on Spark"
 readme = "README.md"
 authors = [
