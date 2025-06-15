@@ -1,10 +1,14 @@
+from typing import Iterable
+
 from pyspark.core.rdd import RDD
 from pyspark.core.context import SparkContext
 import numpy as np
 
 
 def to_simple_rdd(
-    features: np.ndarray, labels: np.ndarray | None, sc: SparkContext | None = None
+    features: np.ndarray | Iterable,
+    labels: np.ndarray | Iterable | None = None,
+    sc: SparkContext | None = None,
 ) -> RDD:
     """Convert numpy arrays of features and labels into
     an RDD of pairs.

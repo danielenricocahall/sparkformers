@@ -2,7 +2,7 @@ import shutil
 import tempfile
 from functools import partial
 from pathlib import Path
-from typing import List, Callable
+from typing import List, Callable, Iterable
 
 import numpy as np
 import torch
@@ -77,7 +77,8 @@ class SparkFormer:
 
             self._master_network.load_state_dict(new_state)
 
-    def predict(self, rdd: RDD) -> List[np.ndarray]:
+    def predict(self, data: Iterable) -> List[np.ndarray]:
+        rdd = to_simple_rdd(data)
         tokenizer = self.tokenizer
         loader = self.loader
         tokenizer_kwargs = self.tokenizer_kwargs

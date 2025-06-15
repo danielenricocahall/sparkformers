@@ -51,7 +51,7 @@ def test_training_huggingface_classification(spark_context, num_workers):
     sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
     # Inference
-    predictions = sparkformer_model.predict(spark_context.parallelize(x_test))
+    predictions = sparkformer_model.predict(x_test)
     model.eval()
     inputs = tokenizer(x_test, padding=True, truncation=True, return_tensors="pt")
     with torch.no_grad():
