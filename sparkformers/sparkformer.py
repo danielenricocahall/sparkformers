@@ -45,6 +45,8 @@ class SparkFormer:
 
     def train(self, data: np.ndarray, labels: np.ndarray | None = None, **kwargs):
         rdd = to_simple_rdd(data, labels)
+        if self.num_workers > 1:
+            rdd = rdd.repartition(self.num_workers)
         optimizer_fn = self.master_optimizer
         loss_fn = self.master_loss
         metrics = self.master_metrics
