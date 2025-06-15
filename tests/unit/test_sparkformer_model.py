@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 from datasets import load_dataset
-from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from transformers import (
@@ -21,9 +20,9 @@ def test_sequence_classification(spark_context, num_workers):
     batch_size = 5
     epochs = 1
 
-    newsgroups = fetch_20newsgroups(subset="train")
-    x = newsgroups.data[:50]
-    y = newsgroups.target[:50]
+    dataset = load_dataset("ag_news")
+    x = dataset["train"]["text"][:50]
+    y = dataset["train"]["label"][:50]
 
     encoder = LabelEncoder()
     y_encoded = encoder.fit_transform(y)
@@ -69,8 +68,8 @@ def test_generation(spark_context, num_workers):
     batch_size = 5
     epochs = 1
 
-    newsgroups = fetch_20newsgroups(subset="train")
-    x = newsgroups.data[:60]
+    dataset = load_dataset("ag_news")
+    x = dataset["train"]["text"][:60]
 
     x_train, x_test = train_test_split(x, test_size=0.2)
 
