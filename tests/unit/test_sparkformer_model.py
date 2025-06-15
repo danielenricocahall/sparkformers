@@ -17,7 +17,7 @@ from sparkformers.sparkformer import SparkFormer
 
 
 @pytest.mark.parametrize("num_workers", [1, 2])
-def test_training_huggingface_classification(spark_context, num_workers):
+def test_sequence_classification(spark_context, num_workers):
     batch_size = 5
     epochs = 1
 
@@ -30,13 +30,13 @@ def test_training_huggingface_classification(spark_context, num_workers):
 
     x_train, x_test, y_train, y_test = train_test_split(x, y_encoded, test_size=0.5)
 
-    model_name = "albert-base-v2"
+    model_name = "prajjwal1/bert-tiny"
 
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name, num_labels=len(np.unique(y_encoded))
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer_kwargs = {"padding": True, "truncation": True}
+    tokenizer_kwargs = {"padding": True, "truncation": True, "max_length": 512}
 
     sparkformer_model = SparkFormer(
         model=model,
@@ -53,7 +53,7 @@ def test_training_huggingface_classification(spark_context, num_workers):
     # Inference
     predictions = sparkformer_model.predict(x_test)
     sparkformer_model._master_network.eval()
-    inputs = tokenizer(x_test, padding=True, truncation=True, return_tensors="pt")
+    inputs = tokenizer(x_test, return_tensors="pt", **tokenizer_kwargs)
     with torch.no_grad():
         expected = (
             sparkformer_model._master_network(**{k: v for k, v in inputs.items()})
@@ -65,7 +65,7 @@ def test_training_huggingface_classification(spark_context, num_workers):
 
 
 @pytest.mark.parametrize("num_workers", [1, 2])
-def test_training_huggingface_generation(spark_context, num_workers):
+def test_generation(spark_context, num_workers):
     batch_size = 5
     epochs = 1
 
