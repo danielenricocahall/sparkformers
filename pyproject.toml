@@ -39,5 +39,7 @@ exclude = [
     "/docs",
     "/examples",
     "README.md",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "logo.png",
+    "LICENSE"
 ]
