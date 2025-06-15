@@ -32,6 +32,10 @@ jobs:
           export SPARK_LOCAL_IP=0.0.0.0
       - name: Install dependencies
         run: uv sync --dev
+      - name: Run lint and format checks
+        run: |
+          uv run ruff check
+          uv run ruff format
       - name: Test with pytest
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
