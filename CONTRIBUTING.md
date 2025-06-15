@@ -18,11 +18,11 @@ We have predefined GitHub issue templates to help categorize and resolve issues 
 - 🚀 Feature Request – Suggest new functionality or enhancements with a clear use case.
 - 📖 Documentation Request – Report missing or unclear documentation.
 
-You can open an issue using the appropriate template directly from our [Issues Page](https://github.com/danielenricocahall/elephas/issues/new/choose).
+You can open an issue using the appropriate template directly from our [Issues Page](https://github.com/danielenricocahall/sparkformers/issues/new/choose).
 
 
 ## Local Environment Setup
-If you want to make a change yourself based on an Issue, it should be fairly simple after [forking the repository](https://github.com/danielenricocahall/elephas/fork) and cloning your fork. 
+If you want to make a change yourself based on an Issue, it should be fairly simple after [forking the repository](https://github.com/danielenricocahall/sparkformers/fork) and cloning your fork. 
 
 This project currently uses `uv` for convenience. To create your environment:
 ```shell
