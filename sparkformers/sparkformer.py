@@ -365,14 +365,9 @@ class SparkFormerWorker:
             )
             input_ids = tokenized["input_ids"]
             attention_mask = tokenized["attention_mask"]
+            labels = input_ids.clone()
+            dataset = TensorDataset(input_ids, attention_mask, labels)
 
-            # Shift input for causal LM loss
-            input_ids_shifted = input_ids[:, :-1]
-            labels_shifted = input_ids[:, 1:]
-
-            dataset = TensorDataset(
-                input_ids_shifted, attention_mask[:, :-1], labels_shifted
-            )
             dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
             total_loss = 0.0
             for epoch in range(self.epochs):
