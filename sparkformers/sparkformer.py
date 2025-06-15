@@ -165,8 +165,8 @@ class SparkFormer:
         from pyspark.sql import SparkSession
 
         sc = (
-            SparkSession.builder.getOrCreate().sparkContext
-        )  # ty: ignore[possibly-unbound-attribute]
+            SparkSession.builder.getOrCreate().sparkContext  # ty: ignore[possibly-unbound-attribute]
+        )
         inputs_list = [
             {key: kwargs[key][i] for key in kwargs}
             for i in range(len(next(iter(kwargs.values()))))
