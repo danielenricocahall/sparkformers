@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import logging
 from functools import partial
 from pathlib import Path
 from typing import List, Callable, Iterable
@@ -8,6 +9,7 @@ import numpy as np
 import torch
 from pyspark.core.rdd import RDD
 from pyspark.core.files import SparkFiles
+from torch.utils.data import TensorDataset, DataLoader
 from transformers import (
     AutoModelForSequenceClassification,
     AutoModelForTokenClassification,
@@ -17,6 +19,8 @@ from transformers import (
 from sparkformers.utils.rdd_utils import to_simple_rdd
 from sparkformers.utils.torch_utils import divide_by, subtract_params, get_param_diff
 from sparkformers.utils.hf_utils import pad_labels, load_model_from_zip
+
+logger = logging.getLogger(__name__)
 
 
 class SparkFormer:
@@ -50,7 +54,8 @@ class SparkFormer:
         optimizer_fn = self.master_optimizer
         loss_fn = self.master_loss
         metrics = self.master_metrics
-        train_config = kwargs
+        batch_size = kwargs.get("batch_size", 32)
+        epochs = kwargs.get("epochs", 1)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             self._master_network.save_pretrained(temp_dir)
@@ -58,7 +63,6 @@ class SparkFormer:
             broadcast_dir = rdd.context.broadcast(temp_dir)
 
             worker = SparkFormerWorker(
-                train_config,
                 optimizer_fn,
                 loss_fn,
                 metrics,
@@ -66,6 +70,8 @@ class SparkFormer:
                 tokenizer=self.tokenizer,
                 tokenizer_kwargs=self.tokenizer_kwargs,
                 loader=self.loader,
+                batch_size=batch_size,
+                epochs=epochs,
             )
 
             training_outcomes = rdd.mapPartitions(worker.train).collect()
@@ -242,7 +248,6 @@ class SparkFormer:
 class SparkFormerWorker:
     def __init__(
         self,
-        train_config,
         master_optimizer,
         master_loss,
         master_metrics,
@@ -250,16 +255,19 @@ class SparkFormerWorker:
         tokenizer,
         tokenizer_kwargs,
         loader,
+        batch_size,
+        epochs,
     ):
         self.tokenizer = tokenizer
         self.tokenizer_kwargs = tokenizer_kwargs
         self.temp_dir = temp_dir
         self.loader = loader
-        self.train_config = train_config
         self.master_optimizer = master_optimizer
         self.master_loss = master_loss
         self.master_metrics = master_metrics
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.batch_size = batch_size
+        self.epochs = epochs
 
     def train(self, data_iterator):
         temp_dir = self.temp_dir.value
@@ -271,53 +279,127 @@ class SparkFormerWorker:
 
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
             x_train, y_train = zip(*data_iterator)
-            x_inputs = self.tokenizer(
+            tokenized = self.tokenizer(
                 list(x_train), **self.tokenizer_kwargs, return_tensors="pt"
             ).to(self.device)
             y_train = torch.tensor(y_train).to(self.device)
             loss_fn = self.master_loss()
+            input_ids = tokenized["input_ids"]
+            attention_mask = tokenized["attention_mask"]
+            dataset = TensorDataset(input_ids, attention_mask, y_train)
+            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+            total_loss = 0.0
 
-            optimizer.zero_grad()
-            outputs = model(**x_inputs)
-            loss = loss_fn(outputs.logits, y_train)
-            loss.backward()
-            optimizer.step()
-            history = {"loss": loss.item()}
+            for epoch in range(self.epochs):
+                epoch_loss = 0.0
+                for batch in dataloader:
+                    input_ids_batch, attn_mask_batch, labels_batch = [
+                        t.to(self.device) for t in batch
+                    ]
+
+                    optimizer.zero_grad()
+                    outputs = model(
+                        input_ids=input_ids_batch, attention_mask=attn_mask_batch
+                    )
+                    loss = loss_fn(outputs.logits, labels_batch)
+                    loss.backward()
+                    optimizer.step()
+
+                    epoch_loss += loss.item()
+                total_loss += epoch_loss
+                logger.info(
+                    f"Epoch {epoch + 1} - Loss: {epoch_loss / len(dataloader):.4f}"
+                )
+
+            history = {"loss": total_loss / len(dataloader)}
 
         elif self.loader.__name__ == AutoModelForTokenClassification.__name__:
             x_train, y_train = zip(*data_iterator)
+
             tokenized = self.tokenizer(
                 list(x_train), **self.tokenizer_kwargs, return_tensors="pt"
             )
-            max_len = tokenized["input_ids"].shape[1]
-            y_train_padded = pad_labels(y_train, max_len, -100)
-            labels = torch.tensor(y_train_padded).to(self.device)
-            tokenized = {k: v.to(self.device) for k, v in tokenized.items()}
+            input_ids = tokenized["input_ids"]
+            attention_mask = tokenized["attention_mask"]
+            max_len = input_ids.shape[1]
+
+            y_train_padded = pad_labels(
+                y_train, max_len, -100
+            )  # -100 is the default padding label for transformers
+            labels = torch.tensor(y_train_padded)
+
+            dataset = TensorDataset(input_ids, attention_mask, labels)
+            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
             loss_fn = self.master_loss()
-            optimizer.zero_grad()
-            outputs = model(**tokenized)
-            loss = loss_fn(
-                outputs.logits.view(-1, outputs.logits.size(-1)), labels.view(-1)
-            )
-            loss.backward()
-            optimizer.step()
-            history = {"loss": loss.item()}
+            total_loss = 0.0
+            for epoch in range(self.epochs):
+                epoch_loss = 0.0
+                for batch in dataloader:
+                    input_ids_batch, attn_mask_batch, label_batch = [
+                        b.to(self.device) for b in batch
+                    ]
 
+                    optimizer.zero_grad()
+                    outputs = model(
+                        input_ids=input_ids_batch, attention_mask=attn_mask_batch
+                    )
+                    loss = loss_fn(
+                        outputs.logits.view(-1, outputs.logits.size(-1)),
+                        label_batch.view(-1),
+                    )
+                    loss.backward()
+                    optimizer.step()
+
+                    epoch_loss += loss.item()
+                total_loss += epoch_loss
+                logger.info(
+                    f"Epoch {epoch + 1} - Loss: {epoch_loss / len(dataloader):.4f}"
+                )
+
+            history = {"loss": total_loss / len(dataloader)}
         elif self.loader.__name__ == AutoModelForCausalLM.__name__:
             x_train = list(data_iterator)
             tokenized = self.tokenizer(
                 x_train, **self.tokenizer_kwargs, return_tensors="pt"
             )
-            input_ids = tokenized["input_ids"][:, :-1].to(self.device)
-            labels = tokenized["input_ids"][:, 1:].to(self.device)
+            input_ids = tokenized["input_ids"]
+            attention_mask = tokenized["attention_mask"]
 
-            optimizer.zero_grad()
-            outputs = model(input_ids, labels=labels)
-            loss = outputs.loss
-            loss.backward()
-            optimizer.step()
-            history = {"loss": loss.item()}
+            # Shift input for causal LM loss
+            input_ids_shifted = input_ids[:, :-1]
+            labels_shifted = input_ids[:, 1:]
+
+            dataset = TensorDataset(
+                input_ids_shifted, attention_mask[:, :-1], labels_shifted
+            )
+            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+            total_loss = 0.0
+            for epoch in range(self.epochs):
+                epoch_loss = 0.0
+                for batch in dataloader:
+                    input_ids_batch, attn_mask_batch, labels_batch = [
+                        b.to(self.device) for b in batch
+                    ]
+
+                    optimizer.zero_grad()
+                    outputs = model(
+                        input_ids=input_ids_batch,
+                        attention_mask=attn_mask_batch,
+                        labels=labels_batch,
+                    )
+                    loss = outputs.loss
+                    loss.backward()
+                    optimizer.step()
+
+                    epoch_loss += loss.item()
+
+                logger.info(
+                    f"Epoch {epoch + 1} - Loss: {epoch_loss / len(dataloader):.4f}"
+                )
+
+            history = {"loss": total_loss / len(dataloader)}
+
         else:
             raise ValueError(f"Unsupported loader: {self.loader.__name__}")
 
