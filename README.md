@@ -1,12 +1,13 @@
 # Overview
-Distributed training of [Transformers](https://github.com/huggingface/transformers) models on Spark!
+![img.png](logo.png)
+Welcome to Sparkformers, where we offer distributed training of [Transformers](https://github.com/huggingface/transformers) models on [Spark](https://spark.apache.org/)!
 
-# Motivation
-Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend!
+# Motivation / Purpose
+Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend! The purpose of this project is to serve as an experimental backend for distributed training that may be more developergonomic compared to other solutions such as [Ray](https://docs.ray.io/en/latest/train/train.html).
 
-# Example
+# Examples
 
-## Autoregressive Language Model Training
+## Autoregressive (Causal) Language Model Training and Inference
 ```python
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
@@ -114,4 +115,81 @@ predictions = sparkformer_model.predict(x_test)
 print([np.argmax(pred) for pred in predictions])
 ```
 
+## Token Classification (NER)
+```python
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.model_selection import train_test_split
+from sparkformers.sparkformer import SparkFormer
+from transformers import (
+    AutoTokenizer,
+    AutoModelForTokenClassification,
+)
+from datasets import load_dataset
+import numpy as np
+import torch
+batch_size = 5
+epochs = 2
+model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+
+model = AutoModelForTokenClassification.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+def tokenize_and_align_labels(examples):
+    tokenized_inputs = tokenizer(
+        examples["tokens"], truncation=True, is_split_into_words=True
+    )
+    labels = []
+    for i, label in enumerate(examples["ner_tags"]):
+        word_ids = tokenized_inputs.word_ids(batch_index=i)
+        previous_word_idx = None
+        label_ids = []
+        for word_idx in word_ids:
+            if word_idx is None:
+                label_ids.append(-100)
+            elif word_idx != previous_word_idx:
+                label_ids.append(label[word_idx])
+            else:
+                label_ids.append(-100)
+            previous_word_idx = word_idx
+        labels.append(label_ids)
+    tokenized_inputs["labels"] = labels
+    return tokenized_inputs
+
+dataset = load_dataset("conll2003", split="train[:5%]", trust_remote_code=True)
+dataset = dataset.map(tokenize_and_align_labels, batched=True)
+
+x = dataset["tokens"]
+y = dataset["labels"]
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+
+tokenizer_kwargs = {
+    "padding": True,
+    "truncation": True,
+    "is_split_into_words": True,
+}
+
+sparkformer_model = SparkFormer(
+    model=model,
+    tokenizer=tokenizer,
+    loader=AutoModelForTokenClassification,
+    optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
+    loss_fn=lambda: torch.nn.CrossEntropyLoss(),
+    tokenizer_kwargs=tokenizer_kwargs,
+    num_workers=2,
+)
+
+sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
+
+inputs = tokenizer(x_test, **tokenizer_kwargs, return_tensors="pt")
+distributed_preds = sparkformer_model(**inputs)
+print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
+
+ ```
+# TODO
+- [ ] Validate both GPU and CPU are supported (Elephas supports both, just need to validate the Torch API is being used correctly)
+- [ ] Add support for distributed training of other model types (e.g., image classification, object detection, etc.)
+- [ ] Add support for distributed training of custom models
+- [ ] Consider simplifying the API further (e.g; builder pattern, providing the model string and push loader logic inside the `SparkFormer` class, etc.)
+- [ ] Support Tensorflow/Keras models for completeness (potentially taking similar approach as `transformers` where each class is prefixed with `TF` - it would essentially be copying the old logic from Elephas)
 > 💡 Interested in contributing? Check out the [Local Development & Contributions Guide](https://github.com/danielenricocahall/sparkformers/blob/main/CONTRIBUTING.md).
