@@ -92,12 +92,10 @@ def test_training_huggingface_generation(spark_context, num_workers):
         num_workers=num_workers,
     )
 
-    rdd_test = spark_context.parallelize(x_test)
-
     sparkformer_model.train(x_train, epochs=epochs, batch_size=batch_size)
 
     generations = sparkformer_model.generate(
-        rdd_test, max_new_tokens=10, num_return_sequences=1
+        x_test, max_new_tokens=10, num_return_sequences=1
     )
     generated_texts = [
         tokenizer.decode(output, skip_special_tokens=True) for output in generations
@@ -105,7 +103,7 @@ def test_training_huggingface_generation(spark_context, num_workers):
 
     # Reference output
     model.eval()
-    inputs = tokenizer(x_test, return_tensors="pt", padding=True, truncation=True)
+    inputs = tokenizer(x_test, return_tensors="pt", **tokenizer_kwargs)
     with torch.no_grad():
         expected_outputs = model.generate(
             **inputs, max_new_tokens=10, num_return_sequences=1

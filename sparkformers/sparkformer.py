@@ -106,12 +106,12 @@ class SparkFormer:
 
             return self._call_and_collect(rdd, _predict, _predict_with_indices)
 
-    def generate(self, rdd: RDD, **kwargs) -> List[np.ndarray]:
+    def generate(self, data: Iterable, **kwargs) -> List[np.ndarray]:
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
             raise ValueError(
                 "This method is only for causal language models, not classification models."
             )
-
+        rdd = to_simple_rdd(data)
         tokenizer = self.tokenizer
         loader = self.loader
         tokenizer_kwargs = self.tokenizer_kwargs
