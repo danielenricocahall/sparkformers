@@ -4,7 +4,7 @@ import numpy as np
 
 
 def to_simple_rdd(
-    features: np.ndarray, labels: np.ndarray, sc: SparkContext | None = None
+    features: np.ndarray, labels: np.ndarray | None, sc: SparkContext | None = None
 ) -> RDD:
     """Convert numpy arrays of features and labels into
     an RDD of pairs.
@@ -16,5 +16,7 @@ def to_simple_rdd(
     """
     if sc is None:
         sc = SparkContext.getOrCreate()
+    if labels is None:
+        return sc.parallelize(features)
     pairs = [(x, y) for x, y in zip(features, labels)]
     return sc.parallelize(pairs)

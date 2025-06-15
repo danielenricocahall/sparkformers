@@ -43,13 +43,8 @@ class SparkFormer:
         self.num_workers = num_workers
         self.training_histories = []
 
-    def train(self, data: RDD | np.ndarray, labels: np.ndarray | None = None, **kwargs):
-        if isinstance(data, RDD):
-            rdd = data
-        elif isinstance(data, np.ndarray) and labels is not None:
-            rdd = to_simple_rdd(data, labels)
-        else:
-            raise ValueError("Either supply `data` and `labels`, or an RDD.")
+    def train(self, data: np.ndarray, labels: np.ndarray | None = None, **kwargs):
+        rdd = to_simple_rdd(data, labels)
         optimizer_fn = self.master_optimizer
         loss_fn = self.master_loss
         metrics = self.master_metrics

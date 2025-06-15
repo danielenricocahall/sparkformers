@@ -92,10 +92,9 @@ def test_training_huggingface_generation(spark_context, num_workers):
         num_workers=num_workers,
     )
 
-    rdd = spark_context.parallelize(x_train)
     rdd_test = spark_context.parallelize(x_test)
 
-    sparkformer_model.train(rdd, epochs=epochs, batch_size=batch_size)
+    sparkformer_model.train(x_train, epochs=epochs, batch_size=batch_size)
 
     generations = sparkformer_model._generate(
         rdd_test, max_new_tokens=10, num_return_sequences=1
