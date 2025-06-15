@@ -52,10 +52,14 @@ def test_training_huggingface_classification(spark_context, num_workers):
 
     # Inference
     predictions = sparkformer_model.predict(x_test)
-    model.eval()
+    sparkformer_model._master_network.eval()
     inputs = tokenizer(x_test, padding=True, truncation=True, return_tensors="pt")
     with torch.no_grad():
-        expected = model(**{k: v for k, v in inputs.items()}).logits.cpu().numpy()
+        expected = (
+            sparkformer_model._master_network(**{k: v for k, v in inputs.items()})
+            .logits.cpu()
+            .numpy()
+        )
     for pred, exp in zip(predictions, expected):
         assert np.allclose(pred, exp, atol=0.1)
 
@@ -102,10 +106,10 @@ def test_training_huggingface_generation(spark_context, num_workers):
     ]
 
     # Reference output
-    model.eval()
+    sparkformer_model._master_network.eval()
     inputs = tokenizer(x_test, return_tensors="pt", **tokenizer_kwargs)
     with torch.no_grad():
-        expected_outputs = model.generate(
+        expected_outputs = sparkformer_model._master_network.generate(
             **inputs, max_new_tokens=10, num_return_sequences=1
         )
     expected_texts = [
@@ -173,9 +177,9 @@ def test_training_huggingface_token_classification(spark_context, num_workers: i
 
     inputs = tokenizer(x_test, **tokenizer_kwargs, return_tensors="pt")
     distributed_preds = sparkformer_model(**inputs)
-    model.eval()
+    sparkformer_model._master_network.eval()
     with torch.no_grad():
-        outputs = model(**{k: v for k, v in inputs.items()})
+        outputs = sparkformer_model._master_network(**{k: v for k, v in inputs.items()})
     reference_preds = outputs.logits.detach().cpu().numpy()
 
     for dpred, rpred in zip(distributed_preds, reference_preds):
