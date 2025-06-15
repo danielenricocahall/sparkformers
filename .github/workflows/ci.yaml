@@ -14,7 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 1
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
@@ -42,4 +41,4 @@ jobs:
       - name: Test with pytest
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
-          uv run pytest tests
+          uv run pytest -v -s tests
