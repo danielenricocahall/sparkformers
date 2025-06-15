@@ -24,5 +24,4 @@ def divide_by(param_dict: dict, scalar: float) -> dict:
 
 
 def get_param_diff(model):
-    # Return model state_dict as "delta"
     return {k: v.cpu().detach().clone() for k, v in model.state_dict().items()}
