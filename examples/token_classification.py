@@ -41,8 +41,8 @@ def tokenize_and_align_labels(examples):
 dataset = load_dataset("conll2003", split="train[:5%]", trust_remote_code=True)
 dataset = dataset.map(tokenize_and_align_labels, batched=True)
 
-x = dataset["tokens"]
-y = dataset["labels"]
+x = dataset["tokens"]  # ty: ignore[possibly-unbound-implicit-call]
+y = dataset["labels"]  # ty: ignore[possibly-unbound-implicit-call]
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
 
