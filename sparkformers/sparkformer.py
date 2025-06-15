@@ -153,12 +153,21 @@ class SparkFormer:
         else:
             return rdd.mapPartitions(partial(predict_func)).collect()
 
-    def save(self, file_name: str, overwrite: bool = False):
-        if not file_name.endswith(".bin"):
-            raise ValueError("File name must end with '.bin' for PyTorch models.")
-        if overwrite and Path(file_name).exists():
-            Path(file_name).unlink()
-        self._master_network.save_pretrained(file_name)
+    def save(self, dir_path: str, overwrite: bool = False):
+        path = Path(dir_path)
+        if path.exists():
+            if not path.is_dir():
+                raise ValueError(f"{dir_path} exists and is not a directory.")
+            if overwrite:
+                shutil.rmtree(path)
+            else:
+                raise FileExistsError(
+                    f"{dir_path} already exists. Use `overwrite=True` to replace it."
+                )
+
+        self._master_network.save_pretrained(dir_path)
+        if self.tokenizer:
+            self.tokenizer.save_pretrained(dir_path)
 
     def __call__(self, *args, **kwargs):
         from pyspark.sql import SparkSession
