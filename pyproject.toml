@@ -21,7 +21,7 @@ addopts = "--cov"
 
 [tool.coverage.run]
 branch = true
-source = ["elephas"]
+source = ["sparkformers"]
 
 [tool.coverage.report]
 show_missing = true
