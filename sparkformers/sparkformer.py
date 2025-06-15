@@ -105,7 +105,7 @@ class SparkFormer:
 
             return self._call_and_collect(rdd, _predict, _predict_with_indices)
 
-    def _generate(self, rdd: RDD, **kwargs) -> List[np.ndarray]:
+    def generate(self, rdd: RDD, **kwargs) -> List[np.ndarray]:
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
             raise ValueError(
                 "This method is only for causal language models, not classification models."
@@ -152,14 +152,12 @@ class SparkFormer:
         else:
             return rdd.mapPartitions(partial(predict_func)).collect()
 
-    def save(self, file_name: str, overwrite: bool = False, to_hadoop: bool = False):
+    def save(self, file_name: str, overwrite: bool = False):
         if not file_name.endswith(".bin"):
             raise ValueError("File name must end with '.bin' for PyTorch models.")
-        if overwrite and not to_hadoop and Path(file_name).exists():
+        if overwrite and Path(file_name).exists():
             Path(file_name).unlink()
         self._master_network.save_pretrained(file_name)
-        if to_hadoop:
-            raise NotImplementedError("Hadoop save logic is not implemented.")
 
     def __call__(self, *args, **kwargs):
         from pyspark.sql import SparkSession
