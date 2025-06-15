@@ -36,6 +36,8 @@ jobs:
         run: |
           uv run ruff check
           uv run ruff format
+      - name: Run type checks
+        run: uv run ty check --exclude tests/
       - name: Test with pytest
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)

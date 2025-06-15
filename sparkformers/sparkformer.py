@@ -6,7 +6,8 @@ from typing import List, Callable
 
 import numpy as np
 import torch
-from pyspark import RDD, SparkFiles
+from pyspark.core.rdd import RDD
+from pyspark.core.files import SparkFiles
 from transformers import (
     AutoModelForSequenceClassification,
     AutoModelForTokenClassification,
@@ -42,10 +43,10 @@ class SparkFormer:
         self.num_workers = num_workers
         self.training_histories = []
 
-    def train(self, data: RDD, labels=None, **kwargs):
+    def train(self, data: RDD | np.ndarray, labels: np.ndarray | None = None, **kwargs):
         if isinstance(data, RDD):
             rdd = data
-        elif labels is not None:
+        elif isinstance(data, np.ndarray) and labels is not None:
             rdd = to_simple_rdd(data, labels)
         else:
             raise ValueError("Either supply `data` and `labels`, or an RDD.")
@@ -168,7 +169,9 @@ class SparkFormer:
     def __call__(self, *args, **kwargs):
         from pyspark.sql import SparkSession
 
-        sc = SparkSession.builder.getOrCreate().sparkContext
+        sc = (
+            SparkSession.builder.getOrCreate().sparkContext
+        )  # ty: ignore[possibly-unbound-attribute]
         inputs_list = [
             {key: kwargs[key][i] for key in kwargs}
             for i in range(len(next(iter(kwargs.values()))))
