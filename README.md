@@ -10,7 +10,7 @@ Note that all examples are also available in the [examples directory](https://gi
 
 ## Autoregressive (Causal) Language Model Training and Inference
 ```python
-from sklearn.datasets import fetch_20newsgroups
+from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from sparkformers.sparkformer import SparkFormer
 from transformers import (
@@ -21,8 +21,8 @@ import torch
 batch_size = 20
 epochs = 10
 
-newsgroups = fetch_20newsgroups(subset="train")
-x = newsgroups.data
+dataset = load_dataset("ag_news")
+x = dataset["train"]["text"]
 
 x_train, x_test = train_test_split(x, test_size=0.2)
 
@@ -80,8 +80,8 @@ batch_size = 20
 epochs = 10
 
 newsgroups = fetch_20newsgroups(subset="train")
-x = newsgroups.data[:50]
-y = newsgroups.target[:50]
+x = newsgroups.data
+y = newsgroups.target
 
 encoder = LabelEncoder()
 y_encoded = encoder.fit_transform(y)

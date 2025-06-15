@@ -1,4 +1,4 @@
-from sklearn.datasets import fetch_20newsgroups
+from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sparkformers.sparkformer import SparkFormer
@@ -12,9 +12,9 @@ import torch
 batch_size = 20
 epochs = 10
 
-newsgroups = fetch_20newsgroups(subset="train")
-x = newsgroups.data[:50]
-y = newsgroups.target[:50]
+dataset = load_dataset("ag_news")
+x = dataset["train"]["text"]  # ty: ignore[possibly-unbound-implicit-call]
+y = dataset["train"]["label"]  # ty: ignore[possibly-unbound-implicit-call]
 
 encoder = LabelEncoder()
 y_encoded = encoder.fit_transform(y)

@@ -1,4 +1,4 @@
-from sklearn.datasets import fetch_20newsgroups
+from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from sparkformers.sparkformer import SparkFormer
 from transformers import (
@@ -10,8 +10,9 @@ import torch
 batch_size = 20
 epochs = 10
 
-newsgroups = fetch_20newsgroups(subset="train")
-x = newsgroups.data
+dataset = load_dataset("ag_news")
+x = dataset["train"]["text"]  # ty: ignore[possibly-unbound-implicit-call]
+
 
 x_train, x_test = train_test_split(x, test_size=0.2)
 
