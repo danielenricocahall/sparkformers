@@ -6,6 +6,7 @@ Welcome to Sparkformers, where we offer distributed training of [Transformers](h
 Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend! The purpose of this project is to serve as an experimental backend for distributed training that may be more developergonomic compared to other solutions such as [Ray](https://docs.ray.io/en/latest/train/train.html).
 
 # Examples
+Note that all examples are also available in the [examples directory](https://github.com/danielenricocahall/sparkformers/tree/main/examples).
 
 ## Autoregressive (Causal) Language Model Training and Inference
 ```python
@@ -117,7 +118,6 @@ print([np.argmax(pred) for pred in predictions])
 
 ## Token Classification (NER)
 ```python
-from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
 from sparkformers.sparkformer import SparkFormer
 from transformers import (
@@ -186,6 +186,7 @@ distributed_preds = sparkformer_model(**inputs)
 print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
 
  ```
+
 # TODO
 - [ ] Validate both GPU and CPU are supported (Elephas supports both, just need to validate the Torch API is being used correctly)
 - [ ] Add support for distributed training of other model types (e.g., image classification, object detection, etc.)
