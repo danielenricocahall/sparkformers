@@ -321,9 +321,3 @@ class SparkFormerWorker:
 
         history = {"loss": total_loss / len(dataloader)}
         return history
-
-
-def save_and_zip_model(model, temp_dir):
-    model.save_pretrained(temp_dir)
-    zip_path = shutil.make_archive(temp_dir, "zip", temp_dir)
-    return zip_path
