@@ -3,7 +3,17 @@
 Welcome to Sparkformers, where we offer distributed training of [Transformers](https://github.com/huggingface/transformers) models on [Spark](https://spark.apache.org/)!
 
 # Motivation / Purpose
-Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend! The purpose of this project is to serve as an experimental backend for distributed training that may be more developergonomic compared to other solutions such as [Ray](https://docs.ray.io/en/latest/train/train.html). Additionally, `Sparkformers` offers the capability for distributed prediction, model calling, and generation (for causal/autoregressive models)
+Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend! The purpose of this project is to serve as an experimental backend for distributed training that may be more developergonomic compared to other solutions such as [Ray](https://docs.ray.io/en/latest/train/train.html). Additionally, `Sparkformers` offers the capability for distributed prediction, model calling, and generation (for causal/autoregressive models). 
+
+The project is currently in a beta/experimental state. While not yet production ready, I invite you to experiment, provide feedback, and/or even contribute!
+
+# Installation
+To install, you can simply run:
+```bash
+pip install sparkformers
+````
+
+(or `uv add`, `poetry add`, etc. with whichever project dependency management tool you may use).
 
 # Examples
 Note that all examples are also available in the [examples directory](https://github.com/danielenricocahall/sparkformers/tree/main/examples).
