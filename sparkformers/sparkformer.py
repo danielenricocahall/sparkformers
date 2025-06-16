@@ -19,7 +19,7 @@ from transformers import (
 )
 
 from sparkformers.utils.rdd_utils import to_simple_rdd
-from sparkformers.utils.torch_utils import add_params, average_states
+from sparkformers.utils.torch_utils import add_params, divide_by
 from sparkformers.utils.hf_utils import pad_labels
 
 logger = logging.getLogger(__name__)
@@ -57,27 +57,36 @@ class SparkFormer:
         batch_size = kwargs.get("batch_size", 32)
         epochs = kwargs.get("epochs", 1)
 
-        with save_and_broadcast_model(
-            self._master_network, rdd.context
-        ) as broadcast_dir:
-            worker = SparkFormerWorker(
-                optimizer_fn,
-                metrics,
-                temp_dir=broadcast_dir,
-                tokenizer=self.tokenizer,
-                tokenizer_kwargs=self.tokenizer_kwargs,
-                loader=self.loader,
-                batch_size=batch_size,
-                epochs=epochs,
-            )
-            training_outcomes = rdd.mapPartitions(worker.train).collect()
-            self.training_histories = [history for _, history in training_outcomes]
-            model_states = [
-                add_params(self._master_network.state_dict(), delta)
-                for delta, _ in training_outcomes
-            ]
-            new_state = average_states(model_states)
-            self._master_network.load_state_dict(new_state)
+        def reducer(x, y):
+            state_dict, history = x
+            other_state_dict, other_history = y
+            updated_state = add_params(state_dict, other_state_dict)
+            combined_history = {k: v + other_history[k] for k, v in history.items()}
+            return updated_state, combined_history
+
+        for epoch in range(epochs):
+            with save_and_broadcast_model(
+                self._master_network, rdd.context
+            ) as broadcast_dir:
+                worker = SparkFormerWorker(
+                    optimizer_fn,
+                    metrics,
+                    temp_dir=broadcast_dir,
+                    tokenizer=self.tokenizer,
+                    tokenizer_kwargs=self.tokenizer_kwargs,
+                    loader=self.loader,
+                    batch_size=batch_size,
+                )
+                aggregated_params, history = rdd.mapPartitions(worker.train).reduce(
+                    reducer
+                )
+                averaged_params = divide_by(aggregated_params, self.num_workers)
+                averaged_history = {k: v / self.num_workers for k, v in history.items()}
+                self._master_network.load_state_dict(averaged_params)
+                self.training_histories.append(history)
+                print(
+                    f"Epoch {epoch + 1}/{epochs} - Loss: {averaged_history['loss']:.4f}"
+                )
 
     def predict(self, data: Iterable) -> List[np.ndarray]:
         rdd = to_simple_rdd(data)
@@ -228,7 +237,6 @@ class SparkFormerWorker:
         tokenizer_kwargs,
         loader,
         batch_size,
-        epochs,
     ):
         self.tokenizer = tokenizer
         self.tokenizer_kwargs = tokenizer_kwargs
@@ -238,7 +246,6 @@ class SparkFormerWorker:
         self.master_metrics = master_metrics
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = batch_size
-        self.epochs = epochs
 
     def train(self, data_iterator):
         temp_dir = self.temp_dir.value
@@ -256,7 +263,7 @@ class SparkFormerWorker:
             y_train = torch.tensor(y_train).to(self.device)
             input_ids = tokenized["input_ids"]
             attention_mask = tokenized["attention_mask"]
-            history = self.run_classification_training_loop(
+            history = self.run_on_batch(
                 model, input_ids, attention_mask, y_train, optimizer
             )
 
@@ -270,7 +277,7 @@ class SparkFormerWorker:
 
             y_train_padded = pad_labels(y_train, max_len, -100)
             labels = torch.tensor(y_train_padded)
-            history = self.run_classification_training_loop(
+            history = self.run_on_batch(
                 model, input_ids, attention_mask, labels, optimizer
             )
         elif self.loader.__name__ == AutoModelForCausalLM.__name__:
@@ -279,7 +286,7 @@ class SparkFormerWorker:
             input_ids = tokenized["input_ids"]
             attention_mask = tokenized["attention_mask"]
             labels = input_ids.clone()
-            history = self.run_classification_training_loop(
+            history = self.run_on_batch(
                 model, input_ids, attention_mask, labels, optimizer
             )
         else:
@@ -287,34 +294,27 @@ class SparkFormerWorker:
         updated_state = model.state_dict()
         yield [updated_state, history]
 
-    def run_classification_training_loop(
-        self, model, input_ids, attention_mask, y_train, optimizer
-    ):
+    def run_on_batch(self, model, input_ids, attention_mask, y_train, optimizer):
         dataset = TensorDataset(input_ids, attention_mask, y_train)
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
         total_loss = 0.0
 
-        for epoch in range(self.epochs):
-            epoch_loss = 0.0
-            for batch in dataloader:
-                input_ids_batch, attn_mask_batch, labels_batch = [
-                    t.to(self.device) for t in batch
-                ]
+        for batch in dataloader:
+            input_ids_batch, attn_mask_batch, labels_batch = [
+                t.to(self.device) for t in batch
+            ]
 
-                optimizer.zero_grad()
-                outputs = model(
-                    input_ids=input_ids_batch,
-                    attention_mask=attn_mask_batch,
-                    labels=labels_batch,
-                )
-                loss = outputs.loss
-                loss.backward()
-                optimizer.step()
+            optimizer.zero_grad()
+            outputs = model(
+                input_ids=input_ids_batch,
+                attention_mask=attn_mask_batch,
+                labels=labels_batch,
+            )
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
 
-                epoch_loss += loss.item()
-            total_loss += epoch_loss
-            print(f"Epoch {epoch + 1} - Loss: {epoch_loss / len(dataloader):.4f}")
-
+            total_loss += loss.item()
         history = {"loss": total_loss / len(dataloader)}
         return history
 
