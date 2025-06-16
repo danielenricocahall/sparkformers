@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import logging
 import uuid
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from typing import List, Callable, Iterable
@@ -86,10 +87,9 @@ class SparkFormer:
         loader = self.loader
         tokenizer_kwargs = self.tokenizer_kwargs
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self._master_network.save_pretrained(temp_dir)
-            rdd.context.addFile(temp_dir, recursive=True)
-            broadcast_dir = rdd.context.broadcast(temp_dir)
+        with save_and_broadcast_model(
+            self._master_network, rdd.context
+        ) as broadcast_dir:
 
             def _predict(partition):
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -122,22 +122,24 @@ class SparkFormer:
         loader = self.loader
         tokenizer_kwargs = self.tokenizer_kwargs
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self._master_network.save_pretrained(temp_dir)
-            rdd.context.addFile(temp_dir, recursive=True)
-            broadcast_dir = rdd.context.broadcast(temp_dir)
+        with save_and_broadcast_model(
+            self._master_network, rdd.context
+        ) as broadcast_dir:
 
             def _generate(partition):
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 temp_dir_ = broadcast_dir.value
                 model_path = SparkFiles.get(temp_dir_)
                 model = loader.from_pretrained(model_path).to(device)
+                model.eval()
+
                 generations = []
 
-                for batch in partition:
-                    inputs = tokenizer(batch, **tokenizer_kwargs)
-                    outputs = model.generate(**inputs, **kwargs)
-                    generations.extend(outputs.cpu().numpy())
+                with torch.no_grad():
+                    for batch in partition:
+                        inputs = tokenizer(batch, **tokenizer_kwargs)
+                        outputs = model.generate(**inputs, **kwargs)
+                        generations.extend(outputs.cpu().numpy())
                 return generations
 
             def _generate_with_indices(partition):
@@ -182,13 +184,9 @@ class SparkFormer:
         rdd = to_simple_rdd(batched_inputs)
         loader = self.loader
 
-        with tempfile.TemporaryDirectory() as temp_base:
-            # Use a unique subdirectory to avoid Spark caching collisions
-            unique_model_dir = Path(temp_base) / f"model_{uuid.uuid4().hex}"
-            unique_model_dir.mkdir()
-            self._master_network.save_pretrained(unique_model_dir)
-            rdd.context.addFile(str(unique_model_dir), recursive=True)
-            broadcast_dir = rdd.context.broadcast(unique_model_dir.name)
+        with save_and_broadcast_model(
+            self._master_network, rdd.context
+        ) as broadcast_dir:
 
             def _predict_tokenized_partition(partition):
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -321,3 +319,15 @@ class SparkFormerWorker:
 
         history = {"loss": total_loss / len(dataloader)}
         return history
+
+
+@contextmanager
+def save_and_broadcast_model(model, rdd_context):
+    with tempfile.TemporaryDirectory() as temp_base:
+        unique_model_dir = Path(temp_base) / f"model_{uuid.uuid4().hex}"
+        unique_model_dir.mkdir()
+        model.save_pretrained(unique_model_dir)
+        rdd_context.addFile(str(unique_model_dir), recursive=True)
+        broadcast_dir = rdd_context.broadcast(unique_model_dir.name)
+        yield broadcast_dir
+        shutil.rmtree(unique_model_dir, ignore_errors=True)
