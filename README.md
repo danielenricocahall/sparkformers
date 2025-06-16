@@ -3,7 +3,7 @@
 Welcome to Sparkformers, where we offer distributed training of [Transformers](https://github.com/huggingface/transformers) models on [Spark](https://spark.apache.org/)!
 
 # Motivation / Purpose
-Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend! The purpose of this project is to serve as an experimental backend for distributed training that may be more developergonomic compared to other solutions such as [Ray](https://docs.ray.io/en/latest/train/train.html).
+Derived from [Elephas](https://github.com/danielenricocahall/elephas), however with [HuggingFace removing support for Tensorflow](https://www.linkedin.com/posts/leonidboytsov_wow-the-huggingface-library-is-dropping-activity-7339003651773915137-mmrV#:~:text=I%20have%20bittersweet%20news%20to,even%20if%20outside%20of%20PyTorch.), I decided to spin some of the logic off into its own separate project, and also rework the paradigm to support the [Torch](https://pytorch.org/) backend! The purpose of this project is to serve as an experimental backend for distributed training that may be more developergonomic compared to other solutions such as [Ray](https://docs.ray.io/en/latest/train/train.html). Additionally, `Sparkformers` offers the capability for distributed prediction, model calling, and generation (for causal/autoregressive models)
 
 # Examples
 Note that all examples are also available in the [examples directory](https://github.com/danielenricocahall/sparkformers/tree/main/examples).
@@ -200,7 +200,7 @@ print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
 # TODO
 - [ ] Validate both GPU and CPU are supported (Elephas supports both, just need to validate the Torch API is being used correctly)
 - [ ] Add support for distributed training of other model types (e.g., image classification, object detection, etc.)
-- [ ] Add support for distributed training of custom models
+- [ ] Expose more configuration options
 - [ ] Consider simplifying the API further (e.g; builder pattern, providing the model string and push loader logic inside the `SparkFormer` class, etc.)
 - [ ] Support Tensorflow/Keras models for completeness (potentially taking similar approach as `transformers` where each class is prefixed with `TF` - it would essentially be copying the old logic from Elephas)
 > 💡 Interested in contributing? Check out the [Local Development & Contributions Guide](https://github.com/danielenricocahall/sparkformers/blob/main/CONTRIBUTING.md).
