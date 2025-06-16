@@ -23,5 +23,8 @@ def divide_by(param_dict: dict, scalar: float) -> dict:
     }
 
 
-def get_param_diff(model):
-    return {k: v.cpu().detach().clone() for k, v in model.state_dict().items()}
+def get_param_diff(model, original_state):
+    return {
+        k: (original_state[k].to(model.device) - v.detach()).cpu()
+        for k, v in model.items()
+    }

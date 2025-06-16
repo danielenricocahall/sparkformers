@@ -7,22 +7,22 @@ from transformers import (
 )
 import torch
 
-batch_size = 20
-epochs = 10
+batch_size = 16
+epochs = 50
 
 dataset = load_dataset("ag_news")
-x = dataset["train"]["text"]  # ty: ignore[possibly-unbound-implicit-call]
+x = dataset["train"]["text"][:1500]  # ty: ignore[possibly-unbound-implicit-call]
 
-
-x_train, x_test = train_test_split(x, test_size=0.2)
+x_train, x_test = train_test_split(x, test_size=0.1)
 
 model_name = "sshleifer/tiny-gpt2"
 
 model = AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
+model.config.pad_token_id = tokenizer.eos_token_id
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer_kwargs = {
-    "max_length": 15,
+    "max_length": 50,
     "padding": True,
     "truncation": True,
     "padding_side": "left",
@@ -32,9 +32,9 @@ sparkformer_model = SparkFormer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForCausalLM,
-    optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-    loss_fn=lambda: torch.nn.CrossEntropyLoss(),
+    optimizer_fn=lambda params: torch.optim.AdamW(params, lr=1e-3),
     tokenizer_kwargs=tokenizer_kwargs,
+    num_workers=2,
 )
 
 # perform distributed training

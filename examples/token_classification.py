@@ -57,7 +57,6 @@ sparkformer_model = SparkFormer(
     tokenizer=tokenizer,
     loader=AutoModelForTokenClassification,
     optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-    loss_fn=lambda: torch.nn.CrossEntropyLoss(),
     tokenizer_kwargs=tokenizer_kwargs,
     num_workers=2,
 )

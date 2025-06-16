@@ -9,7 +9,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForTokenClassification,
 )
-import torch.nn as nn
 import torch
 
 from sparkformers.sparkformer import SparkFormer
@@ -32,7 +31,9 @@ def test_sequence_classification(spark_context, num_workers):
     model_name = "prajjwal1/bert-tiny"
 
     model = AutoModelForSequenceClassification.from_pretrained(
-        model_name, num_labels=len(np.unique(y_encoded))
+        model_name,
+        num_labels=len(np.unique(y_encoded)),
+        problem_type="single_label_classification",
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer_kwargs = {"padding": True, "truncation": True, "max_length": 512}
@@ -42,7 +43,6 @@ def test_sequence_classification(spark_context, num_workers):
         tokenizer=tokenizer,
         loader=AutoModelForSequenceClassification,
         optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-        loss_fn=lambda: nn.CrossEntropyLoss(),
         tokenizer_kwargs=tokenizer_kwargs,
         num_workers=num_workers,
     )
@@ -52,7 +52,7 @@ def test_sequence_classification(spark_context, num_workers):
     # Inference
     predictions = sparkformer_model.predict(x_test)
     sparkformer_model._master_network.eval()
-    inputs = tokenizer(x_test, return_tensors="pt", **tokenizer_kwargs)
+    inputs = tokenizer(x_test, **tokenizer_kwargs)
     with torch.no_grad():
         expected = (
             sparkformer_model._master_network(**{k: v for k, v in inputs.items()})
@@ -90,7 +90,6 @@ def test_generation(spark_context, num_workers):
         tokenizer=tokenizer,
         loader=AutoModelForCausalLM,
         optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-        loss_fn=lambda: nn.CrossEntropyLoss(),
         tokenizer_kwargs=tokenizer_kwargs,
         num_workers=num_workers,
     )
@@ -106,7 +105,7 @@ def test_generation(spark_context, num_workers):
 
     # Reference output
     sparkformer_model._master_network.eval()
-    inputs = tokenizer(x_test, return_tensors="pt", **tokenizer_kwargs)
+    inputs = tokenizer(x_test, **tokenizer_kwargs)
     with torch.no_grad():
         expected_outputs = sparkformer_model._master_network.generate(
             **inputs, max_new_tokens=10, num_return_sequences=1
@@ -167,14 +166,13 @@ def test_training_huggingface_token_classification(spark_context, num_workers: i
         tokenizer=tokenizer,
         loader=AutoModelForTokenClassification,
         optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-        loss_fn=lambda: nn.CrossEntropyLoss(),
         tokenizer_kwargs=tokenizer_kwargs,
         num_workers=num_workers,
     )
 
     sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
-    inputs = tokenizer(x_test, **tokenizer_kwargs, return_tensors="pt")
+    inputs = tokenizer(x_test, **tokenizer_kwargs)
     distributed_preds = sparkformer_model(**inputs)
     sparkformer_model._master_network.eval()
     with torch.no_grad():
