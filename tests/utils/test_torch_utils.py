@@ -1,6 +1,5 @@
 import torch
-from torch import nn
-from sparkformers.utils.torch_utils import subtract_params, divide_by, get_param_diff
+from sparkformers.utils.torch_utils import subtract_params, divide_by
 
 
 def test_subtract_params_basic():
@@ -42,14 +41,3 @@ def test_divide_by_ignores_non_tensors():
     result = divide_by(params, 3)
     assert "extra" not in result
     assert torch.allclose(result["tensor"], torch.tensor([2.0]))
-
-
-def test_get_param_diff_returns_detached_clone():
-    model = nn.Linear(2, 1)
-    diff = get_param_diff(model)
-
-    for k, v in model.state_dict().items():
-        assert k in diff
-        assert torch.equal(v.cpu(), diff[k])
-        assert not diff[k].requires_grad
-        assert diff[k] is not v  # Ensure it's a clone

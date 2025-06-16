@@ -21,10 +21,3 @@ def divide_by(param_dict: dict, scalar: float) -> dict:
         for key, value in param_dict.items()
         if isinstance(value, torch.Tensor)
     }
-
-
-def get_param_diff(model, original_state):
-    return {
-        k: (original_state[k].to(model.device) - v.detach()).cpu()
-        for k, v in model.items()
-    }
