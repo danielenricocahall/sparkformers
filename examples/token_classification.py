@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 batch_size = 5
-epochs = 2
+epochs = 1
 model_name = "hf-internal-testing/tiny-bert-for-token-classification"
 
 model = AutoModelForTokenClassification.from_pretrained(model_name)
@@ -44,7 +44,7 @@ dataset = dataset.map(tokenize_and_align_labels, batched=True)
 x = dataset["tokens"]  # ty: ignore[possibly-unbound-implicit-call]
 y = dataset["labels"]  # ty: ignore[possibly-unbound-implicit-call]
 
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
 
 tokenizer_kwargs = {
     "padding": True,
@@ -63,6 +63,6 @@ sparkformer_model = SparkFormer(
 
 sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
-inputs = tokenizer(x_test, **tokenizer_kwargs, return_tensors="pt")
+inputs = tokenizer(x_test, **tokenizer_kwargs)
 distributed_preds = sparkformer_model(**inputs)
 print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])

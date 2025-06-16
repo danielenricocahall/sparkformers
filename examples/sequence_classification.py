@@ -45,7 +45,7 @@ sparkformer_model = SparkFormer(
 sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
 # perform distributed inference
-predictions = sparkformer_model.predict(x_train)
+predictions = sparkformer_model.predict(x_test)
 for i, pred in enumerate(predictions[:10]):
     probs = softmax(torch.tensor(pred), dim=-1)
     print(f"Example {i}: probs={probs.numpy()}, predicted={probs.argmax().item()}")

@@ -20,6 +20,8 @@ def to_simple_rdd(
     """
     if sc is None:
         sc = SparkContext.getOrCreate()
+    if isinstance(features, dict):
+        features = [dict(zip(features, t)) for t in zip(*features.values())]
     if labels is None:
         return sc.parallelize(features)
     pairs = [(x, y) for x, y in zip(features, labels)]

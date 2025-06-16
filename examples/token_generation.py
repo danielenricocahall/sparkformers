@@ -8,10 +8,10 @@ from transformers import (
 import torch
 
 batch_size = 16
-epochs = 50
+epochs = 30
 
 dataset = load_dataset("ag_news")
-x = dataset["train"]["text"][:1500]  # ty: ignore[possibly-unbound-implicit-call]
+x = dataset["train"]["text"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
 
 x_train, x_test = train_test_split(x, test_size=0.1)
 

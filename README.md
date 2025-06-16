@@ -66,9 +66,10 @@ for i, text in enumerate(generated_texts):
 
 ## Sequence Classification
 ```python
-from sklearn.datasets import fetch_20newsgroups
+from datasets import load_dataset
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+from torch import softmax
+
 from sparkformers.sparkformer import SparkFormer
 from transformers import (
     AutoTokenizer,
@@ -76,32 +77,34 @@ from transformers import (
 )
 import numpy as np
 import torch
-batch_size = 20
-epochs = 10
 
-newsgroups = fetch_20newsgroups(subset="train")
-x = newsgroups.data
-y = newsgroups.target
+batch_size = 16
+epochs = 20
 
-encoder = LabelEncoder()
-y_encoded = encoder.fit_transform(y)
 
-x_train, x_test, y_train, y_test = train_test_split(x, y_encoded, test_size=0.5)
+dataset = load_dataset("ag_news")
+x = dataset["train"]["text"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
+y = dataset["train"]["label"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
 
-model_name = "albert-base-v2"
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
+
+model_name = "prajjwal1/bert-tiny"
 
 model = AutoModelForSequenceClassification.from_pretrained(
-    model_name, num_labels=len(np.unique(y_encoded))
+    model_name,
+    num_labels=len(np.unique(y)),
+    problem_type="single_label_classification",
 )
+
+
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-tokenizer_kwargs = {"padding": True, "truncation": True}
+tokenizer_kwargs = {"padding": True, "truncation": True, "max_length": 512}
 
 sparkformer_model = SparkFormer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForSequenceClassification,
-    optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-    loss_fn=lambda: torch.nn.CrossEntropyLoss(),
+    optimizer_fn=lambda params: torch.optim.AdamW(params, lr=2e-4),
     tokenizer_kwargs=tokenizer_kwargs,
     num_workers=2,
 )
@@ -109,11 +112,14 @@ sparkformer_model = SparkFormer(
 # perform distributed training
 sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
-# perform distributed prediction
+# perform distributed inference
 predictions = sparkformer_model.predict(x_test)
+for i, pred in enumerate(predictions[:10]):
+    probs = softmax(torch.tensor(pred), dim=-1)
+    print(f"Example {i}: probs={probs.numpy()}, predicted={probs.argmax().item()}")
 
 # review the predicted labels
-print([np.argmax(pred) for pred in predictions])
+print([int(np.argmax(pred)) for pred in predictions])
 ```
 
 ## Token Classification (NER)
@@ -127,12 +133,14 @@ from transformers import (
 from datasets import load_dataset
 import numpy as np
 import torch
+
 batch_size = 5
-epochs = 2
+epochs = 1
 model_name = "hf-internal-testing/tiny-bert-for-token-classification"
 
 model = AutoModelForTokenClassification.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
+
 
 def tokenize_and_align_labels(examples):
     tokenized_inputs = tokenizer(
@@ -155,13 +163,14 @@ def tokenize_and_align_labels(examples):
     tokenized_inputs["labels"] = labels
     return tokenized_inputs
 
+
 dataset = load_dataset("conll2003", split="train[:5%]", trust_remote_code=True)
 dataset = dataset.map(tokenize_and_align_labels, batched=True)
 
-x = dataset["tokens"]
-y = dataset["labels"]
+x = dataset["tokens"]  # ty: ignore[possibly-unbound-implicit-call]
+y = dataset["labels"]  # ty: ignore[possibly-unbound-implicit-call]
 
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
 
 tokenizer_kwargs = {
     "padding": True,
@@ -174,14 +183,13 @@ sparkformer_model = SparkFormer(
     tokenizer=tokenizer,
     loader=AutoModelForTokenClassification,
     optimizer_fn=lambda params: torch.optim.AdamW(params, lr=5e-5),
-    loss_fn=lambda: torch.nn.CrossEntropyLoss(),
     tokenizer_kwargs=tokenizer_kwargs,
     num_workers=2,
 )
 
 sparkformer_model.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
-inputs = tokenizer(x_test, **tokenizer_kwargs, return_tensors="pt")
+inputs = tokenizer(x_test, **tokenizer_kwargs)
 distributed_preds = sparkformer_model(**inputs)
 print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
 
