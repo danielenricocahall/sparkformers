@@ -57,11 +57,9 @@ class SparkFormer:
         batch_size = kwargs.get("batch_size", 32)
         epochs = kwargs.get("epochs", 1)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            self._master_network.save_pretrained(temp_dir)
-            rdd.context.addFile(temp_dir, recursive=True)
-            broadcast_dir = rdd.context.broadcast(temp_dir)
-
+        with save_and_broadcast_model(
+            self._master_network, rdd.context
+        ) as broadcast_dir:
             worker = SparkFormerWorker(
                 optimizer_fn,
                 metrics,
