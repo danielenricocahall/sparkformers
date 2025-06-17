@@ -7,6 +7,16 @@ Derived from [Elephas](https://github.com/danielenricocahall/elephas), however w
 
 The project is currently in a beta/experimental state. While not yet production ready, I invite you to experiment, provide feedback, and/or even contribute!
 
+# Approach
+
+**Training**: The current architecture utilizes [federated averaging (FedAvg)](https://en.wikipedia.org/wiki/Federated_learning), meaning that each executor is trained on a subset of data, and the model weights are averaged across all executors after each epoch. The original model is then updated with the averaged weights, and then the process is repeated for the next epoch.
+
+**Inference**:  The input data is distributed across the executors, and each executor performs the inference on its subset of data. The results are then collected and returned to the driver.
+
+**Generation**: Same as above, but with the `generate` method of the model.
+
+
+
 # Installation
 To install, you can simply run:
 ```bash
@@ -33,7 +43,7 @@ batch_size = 16
 epochs = 30
 
 dataset = load_dataset("ag_news")
-x = dataset["train"]["text"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
+x = dataset["train"]["text"][:2000] 
 
 x_train, x_test = train_test_split(x, test_size=0.1)
 
@@ -95,8 +105,8 @@ epochs = 20
 
 
 dataset = load_dataset("ag_news")
-x = dataset["train"]["text"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
-y = dataset["train"]["label"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
+x = dataset["train"]["text"][:2000]
+y = dataset["train"]["label"][:2000]
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
 
@@ -179,8 +189,8 @@ def tokenize_and_align_labels(examples):
 dataset = load_dataset("conll2003", split="train[:5%]", trust_remote_code=True)
 dataset = dataset.map(tokenize_and_align_labels, batched=True)
 
-x = dataset["tokens"]  # ty: ignore[possibly-unbound-implicit-call]
-y = dataset["labels"]  # ty: ignore[possibly-unbound-implicit-call]
+x = dataset["tokens"]
+y = dataset["labels"]
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
 
@@ -208,8 +218,8 @@ print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
  ```
 
 # TODO
-- [ ] Validate both GPU and CPU are supported (Elephas supports both, just need to validate the Torch API is being used correctly)
 - [ ] Add support for distributed training of other model types (e.g., image classification, object detection, etc.)
+- [ ] Potentially add asynchronous support for training
 - [ ] Expose more configuration options
 - [ ] Consider simplifying the API further (e.g; builder pattern, providing the model string and push loader logic inside the `SparkFormer` class, etc.)
 - [ ] Support Tensorflow/Keras models for completeness (potentially taking similar approach as `transformers` where each class is prefixed with `TF` - it would essentially be copying the old logic from Elephas)
