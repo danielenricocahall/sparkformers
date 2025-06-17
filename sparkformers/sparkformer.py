@@ -4,7 +4,7 @@ import uuid
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import List, Callable, Iterable, Generator
+from typing import Callable, Iterable, Generator
 
 import numpy as np
 import torch
@@ -84,7 +84,7 @@ class SparkFormer:
                     f"Epoch {epoch + 1}/{epochs} - Loss: {averaged_history['loss']:.4f}"
                 )
 
-    def predict(self, data: Iterable) -> List[np.ndarray]:
+    def predict(self, data: Iterable) -> list[np.ndarray]:
         rdd = to_simple_rdd(data)
         tokenizer = self.tokenizer
         loader = self.loader
@@ -115,7 +115,7 @@ class SparkFormer:
 
             return self._call_and_collect(rdd, _predict, _predict_with_indices)
 
-    def generate(self, data: Iterable, **kwargs) -> List[np.ndarray]:
+    def generate(self, data: Iterable, **kwargs) -> list[np.ndarray]:
         if self.loader.__name__ == AutoModelForSequenceClassification.__name__:
             raise ValueError(
                 "This method is only for causal language models, not classification models."
@@ -154,7 +154,7 @@ class SparkFormer:
 
     def _call_and_collect(
         self, rdd: RDD, predict_func: Callable, predict_with_indices_func: Callable
-    ) -> List[np.ndarray]:
+    ) -> list[np.ndarray]:
         if self.num_workers and self.num_workers > 1:
             rdd = rdd.zipWithIndex().repartition(self.num_workers)
             predictions_and_indices = rdd.mapPartitions(
