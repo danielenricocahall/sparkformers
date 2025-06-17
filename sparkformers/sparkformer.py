@@ -57,13 +57,6 @@ class SparkFormer:
         batch_size = kwargs.get("batch_size", 32)
         epochs = kwargs.get("epochs", 1)
 
-        def reducer(x, y):
-            state_dict, history = x
-            other_state_dict, other_history = y
-            updated_state = add_params(state_dict, other_state_dict)
-            combined_history = {k: v + other_history[k] for k, v in history.items()}
-            return updated_state, combined_history
-
         for epoch in range(epochs):
             with save_and_broadcast_model(
                 self._master_network, rdd.context
@@ -78,12 +71,12 @@ class SparkFormer:
                     batch_size=batch_size,
                 )
                 aggregated_params, history = rdd.mapPartitions(worker.train).reduce(
-                    reducer
+                    accumulate_model_parameters_and_history
                 )
                 averaged_params = divide_by(aggregated_params, self.num_workers)
                 averaged_history = {k: v / self.num_workers for k, v in history.items()}
                 self._master_network.load_state_dict(averaged_params)
-                self.training_histories.append(history)
+                self.training_histories.append(averaged_history)
                 print(
                     f"Epoch {epoch + 1}/{epochs} - Loss: {averaged_history['loss']:.4f}"
                 )
@@ -329,3 +322,11 @@ def save_and_broadcast_model(model, rdd_context):
         broadcast_dir = rdd_context.broadcast(unique_model_dir.name)
         yield broadcast_dir
         shutil.rmtree(unique_model_dir, ignore_errors=True)
+
+
+def accumulate_model_parameters_and_history(x, y):
+    state_dict, history = x
+    other_state_dict, other_history = y
+    updated_state = add_params(state_dict, other_state_dict)
+    combined_history = {k: v + other_history[k] for k, v in history.items()}
+    return updated_state, combined_history
