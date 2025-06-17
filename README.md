@@ -218,8 +218,7 @@ print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
 
 # TODO
 - [ ] Add support for distributed training of other model types (e.g., image classification, object detection, etc.)
-- [ ] Potentially add asynchronous support for training
+- [ ] Support training paradigms using `Trainer`, `TrainingArguments`, and `DataCollater` 
 - [ ] Expose more configuration options
 - [ ] Consider simplifying the API further (e.g; builder pattern, providing the model string and push loader logic inside the `SparkFormer` class, etc.)
-- [ ] Support Tensorflow/Keras models for completeness (potentially taking similar approach as `transformers` where each class is prefixed with `TF` - it would essentially be copying the old logic from Elephas)
 > 💡 Interested in contributing? Check out the [Local Development & Contributions Guide](https://github.com/danielenricocahall/sparkformers/blob/main/CONTRIBUTING.md).
