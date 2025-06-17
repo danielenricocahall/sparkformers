@@ -1,14 +1,15 @@
 import shutil
 import tempfile
-import logging
 import uuid
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import List, Callable, Iterable
+from typing import List, Callable, Iterable, Generator
 
 import numpy as np
 import torch
+from pyspark.core.broadcast import Broadcast
+from pyspark.core.context import SparkContext
 from pyspark.core.rdd import RDD
 from pyspark.core.files import SparkFiles
 from torch.utils.data import TensorDataset, DataLoader
@@ -22,7 +23,9 @@ from sparkformers.utils.rdd_utils import to_simple_rdd
 from sparkformers.utils.torch_utils import add_params, divide_by
 from sparkformers.utils.hf_utils import pad_labels
 
-logger = logging.getLogger(__name__)
+ModelState = dict[str, torch.Tensor]
+History = dict[str, float]
+StateAndHistory = tuple[ModelState, History]
 
 
 class SparkFormer:
@@ -313,7 +316,9 @@ class SparkFormerWorker:
 
 
 @contextmanager
-def save_and_broadcast_model(model, rdd_context):
+def save_and_broadcast_model(
+    model, rdd_context: SparkContext
+) -> Generator[Broadcast[str], None, None]:
     with tempfile.TemporaryDirectory() as temp_base:
         unique_model_dir = Path(temp_base) / f"model_{uuid.uuid4().hex}"
         unique_model_dir.mkdir()
@@ -324,7 +329,9 @@ def save_and_broadcast_model(model, rdd_context):
         shutil.rmtree(unique_model_dir, ignore_errors=True)
 
 
-def accumulate_model_parameters_and_history(x, y):
+def accumulate_model_parameters_and_history(
+    x: StateAndHistory, y: StateAndHistory
+) -> StateAndHistory:
     state_dict, history = x
     other_state_dict, other_history = y
     updated_state = add_params(state_dict, other_state_dict)

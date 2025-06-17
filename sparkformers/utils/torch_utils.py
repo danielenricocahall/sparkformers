@@ -1,7 +1,9 @@
 import torch
 
 
-def subtract_params(before: dict, after: dict) -> dict:
+def subtract_params(
+    before: dict[str, torch.Tensor], after: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
     """
     Subtract two PyTorch state_dicts: delta = before - after
     """
@@ -12,7 +14,9 @@ def subtract_params(before: dict, after: dict) -> dict:
     }
 
 
-def add_params(before: dict, after: dict) -> dict:
+def add_params(
+    before: dict[str, torch.Tensor], after: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
     """
     Add two PyTorch state_dicts: delta = before + after
     """
@@ -23,7 +27,9 @@ def add_params(before: dict, after: dict) -> dict:
     }
 
 
-def divide_by(param_dict: dict, scalar: float) -> dict:
+def divide_by(
+    param_dict: dict[str, torch.Tensor], scalar: float
+) -> dict[str, torch.Tensor]:
     """
     Divide all parameters in a PyTorch state_dict by a scalar
     """
