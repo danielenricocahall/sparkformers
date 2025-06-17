@@ -1,6 +1,6 @@
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -27,7 +27,7 @@ tokenizer_kwargs = {
     "padding_side": "left",
 }
 
-sparkformer_model = SparkFormer(
+sparkformer_model = Sparkformer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForCausalLM,

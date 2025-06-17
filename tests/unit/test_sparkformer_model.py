@@ -11,7 +11,7 @@ from transformers import (
 )
 import torch
 
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 
 
 @pytest.mark.parametrize("num_workers", [1, 2])
@@ -38,7 +38,7 @@ def test_sequence_classification(spark_context, num_workers):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer_kwargs = {"padding": True, "truncation": True, "max_length": 512}
 
-    sparkformer_model = SparkFormer(
+    sparkformer_model = Sparkformer(
         model=model,
         tokenizer=tokenizer,
         loader=AutoModelForSequenceClassification,
@@ -85,7 +85,7 @@ def test_generation(spark_context, num_workers):
         "padding_side": "left",
     }
 
-    sparkformer_model = SparkFormer(
+    sparkformer_model = Sparkformer(
         model=model,
         tokenizer=tokenizer,
         loader=AutoModelForCausalLM,
@@ -161,7 +161,7 @@ def test_training_huggingface_token_classification(spark_context, num_workers: i
         "is_split_into_words": True,
     }
 
-    sparkformer_model = SparkFormer(
+    sparkformer_model = Sparkformer(
         model=model,
         tokenizer=tokenizer,
         loader=AutoModelForTokenClassification,

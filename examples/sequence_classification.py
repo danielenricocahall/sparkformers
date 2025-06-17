@@ -2,7 +2,7 @@ from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from torch import softmax
 
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -32,7 +32,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer_kwargs = {"padding": True, "truncation": True, "max_length": 512}
 
-sparkformer_model = SparkFormer(
+sparkformer_model = Sparkformer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForSequenceClassification,

@@ -36,7 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class SparkFormer:
+class Sparkformer:
     def __init__(
         self,
         model,
@@ -72,7 +72,7 @@ class SparkFormer:
             with save_and_broadcast_model(
                 self._master_network, rdd.context
             ) as broadcast_dir:
-                worker = SparkFormerWorker(
+                worker = SparkformerWorker(
                     optimizer_fn,
                     metrics,
                     temp_dir=broadcast_dir,
@@ -230,7 +230,7 @@ class SparkFormer:
             )
 
 
-class SparkFormerWorker:
+class SparkformerWorker:
     def __init__(
         self,
         master_optimizer,

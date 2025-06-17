@@ -31,7 +31,7 @@ Note that all examples are also available in the [examples directory](https://gi
 ```python
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -58,7 +58,7 @@ tokenizer_kwargs = {
     "padding_side": "left",
 }
 
-sparkformer_model = SparkFormer(
+sparkformer_model = Sparkformer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForCausalLM,
@@ -90,7 +90,7 @@ from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from torch import softmax
 
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -120,7 +120,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer_kwargs = {"padding": True, "truncation": True, "max_length": 512}
 
-sparkformer_model = SparkFormer(
+sparkformer_model = Sparkformer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForSequenceClassification,
@@ -145,7 +145,7 @@ print([int(np.argmax(pred)) for pred in predictions])
 ## Token Classification (NER)
 ```python
 from sklearn.model_selection import train_test_split
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 from transformers import (
     AutoTokenizer,
     AutoModelForTokenClassification,
@@ -198,7 +198,7 @@ tokenizer_kwargs = {
     "is_split_into_words": True,
 }
 
-sparkformer_model = SparkFormer(
+sparkformer_model = Sparkformer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForTokenClassification,
@@ -219,5 +219,5 @@ print([int(np.argmax(x)) for x in np.squeeze(distributed_preds)])
 - [ ] Add support for distributed training of other model types (e.g., image classification, object detection, etc.)
 - [ ] Support training paradigms using `Trainer`, `TrainingArguments`, and `DataCollater` 
 - [ ] Expose more configuration options
-- [ ] Consider simplifying the API further (e.g; builder pattern, providing the model string and push loader logic inside the `SparkFormer` class, etc.)
+- [ ] Consider simplifying the API further (e.g; builder pattern, providing the model string and push loader logic inside the `Sparkformer` class, etc.)
 > 💡 Interested in contributing? Check out the [Local Development & Contributions Guide](https://github.com/danielenricocahall/sparkformers/blob/main/CONTRIBUTING.md).

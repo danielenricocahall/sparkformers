@@ -1,5 +1,5 @@
 from sklearn.model_selection import train_test_split
-from sparkformers.sparkformer import SparkFormer
+from sparkformers.sparkformer import Sparkformer
 from transformers import (
     AutoTokenizer,
     AutoModelForTokenClassification,
@@ -52,7 +52,7 @@ tokenizer_kwargs = {
     "is_split_into_words": True,
 }
 
-sparkformer_model = SparkFormer(
+sparkformer_model = Sparkformer(
     model=model,
     tokenizer=tokenizer,
     loader=AutoModelForTokenClassification,
