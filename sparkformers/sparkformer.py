@@ -187,8 +187,7 @@ class SparkFormer:
                 )
 
         self._master_network.save_pretrained(dir_path)
-        if self.tokenizer:
-            self.tokenizer.save_pretrained(dir_path)
+        self.tokenizer.save_pretrained(dir_path)
 
     def __call__(self, **kwargs):
         batched_inputs = {k: v for k, v in kwargs.items()}
