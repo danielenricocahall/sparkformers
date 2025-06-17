@@ -8,10 +8,10 @@ from transformers import (
 import torch
 
 batch_size = 16
-epochs = 30
+epochs = 100
 
-dataset = load_dataset("ag_news")
-x = dataset["train"]["text"][:2000]  # ty: ignore[possibly-unbound-implicit-call]
+dataset = load_dataset("gfigueroa/wikitext_processed")
+x = dataset["train"]["text"]  # ty: ignore[possibly-unbound-implicit-call]
 
 x_train, x_test = train_test_split(x, test_size=0.1)
 
@@ -19,7 +19,6 @@ model_name = "sshleifer/tiny-gpt2"
 
 model = AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model.config.pad_token_id = tokenizer.eos_token_id
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer_kwargs = {
     "max_length": 50,

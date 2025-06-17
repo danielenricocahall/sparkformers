@@ -68,12 +68,12 @@ def test_generation(spark_context, num_workers):
     batch_size = 5
     epochs = 1
 
-    dataset = load_dataset("ag_news")
+    dataset = load_dataset("gfigueroa/wikitext_processed")
     x = dataset["train"]["text"][:60]
 
     x_train, x_test = train_test_split(x, test_size=0.2)
 
-    model_name = "sshleifer/tiny-gpt2"
+    model_name = "hf-internal-testing/tiny-random-gptj"
 
     model = AutoModelForCausalLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
