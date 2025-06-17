@@ -1,16 +1,11 @@
 import logging
 import shutil
-import tempfile
-import uuid
-from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Callable, Iterable, Generator
+from typing import Callable, Iterable
 
 import numpy as np
 import torch
-from pyspark.core.broadcast import Broadcast
-from pyspark.core.context import SparkContext
 from pyspark.core.rdd import RDD
 from pyspark.core.files import SparkFiles
 from torch.utils.data import TensorDataset, DataLoader
@@ -20,8 +15,12 @@ from transformers import (
     AutoModelForCausalLM,
 )
 
-from sparkformers.utils.rdd_utils import to_simple_rdd
-from sparkformers.utils.torch_utils import add_params, divide_by
+from sparkformers.utils.model_utils import save_and_broadcast_model
+from sparkformers.utils.rdd_utils import (
+    to_simple_rdd,
+    accumulate_model_parameters_and_history,
+)
+from sparkformers.utils.torch_utils import divide_by
 from sparkformers.utils.hf_utils import pad_labels
 
 ModelState = dict[str, torch.Tensor]
@@ -321,27 +320,3 @@ class SparkformerWorker:
             total_loss += loss.item()
         history = {"loss": total_loss / len(dataloader)}
         return history
-
-
-@contextmanager
-def save_and_broadcast_model(
-    model, rdd_context: SparkContext
-) -> Generator[Broadcast[str], None, None]:
-    with tempfile.TemporaryDirectory() as temp_base:
-        unique_model_dir = Path(temp_base) / f"model_{uuid.uuid4().hex}"
-        unique_model_dir.mkdir()
-        model.save_pretrained(unique_model_dir)
-        rdd_context.addFile(str(unique_model_dir), recursive=True)
-        broadcast_dir = rdd_context.broadcast(unique_model_dir.name)
-        yield broadcast_dir
-        shutil.rmtree(unique_model_dir, ignore_errors=True)
-
-
-def accumulate_model_parameters_and_history(
-    x: StateAndHistory, y: StateAndHistory
-) -> StateAndHistory:
-    state_dict, history = x
-    other_state_dict, other_history = y
-    updated_state = add_params(state_dict, other_state_dict)
-    combined_history = {k: v + other_history[k] for k, v in history.items()}
-    return updated_state, combined_history

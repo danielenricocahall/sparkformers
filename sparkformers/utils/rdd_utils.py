@@ -1,8 +1,15 @@
 from typing import Iterable
 
+import torch
 from pyspark.core.rdd import RDD
 from pyspark.core.context import SparkContext
 import numpy as np
+
+from sparkformers.utils.torch_utils import add_params
+
+ModelState = dict[str, torch.Tensor]
+History = dict[str, float]
+StateAndHistory = tuple[ModelState, History]
 
 
 def to_simple_rdd(
@@ -26,3 +33,13 @@ def to_simple_rdd(
         return sc.parallelize(features)
     pairs = [(x, y) for x, y in zip(features, labels)]
     return sc.parallelize(pairs)
+
+
+def accumulate_model_parameters_and_history(
+    x: StateAndHistory, y: StateAndHistory
+) -> StateAndHistory:
+    state_dict, history = x
+    other_state_dict, other_history = y
+    updated_state = add_params(state_dict, other_state_dict)
+    combined_history = {k: v + other_history[k] for k, v in history.items()}
+    return updated_state, combined_history
