@@ -289,6 +289,7 @@ class SparkFormerWorker:
             input_ids = tokenized["input_ids"]
             attention_mask = tokenized["attention_mask"]
             labels = input_ids.clone()
+            labels[labels == self.tokenizer.pad_token_id] = -100
             history = self.run_on_batch(
                 model, input_ids, attention_mask, labels, optimizer
             )
