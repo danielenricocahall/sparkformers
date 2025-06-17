@@ -15,7 +15,7 @@ x = dataset["train"]["text"]  # ty: ignore[possibly-unbound-implicit-call]
 
 x_train, x_test = train_test_split(x, test_size=0.1)
 
-model_name = "sshleifer/tiny-gpt2"
+model_name = "hf-internal-testing/tiny-random-gptj"
 
 model = AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
