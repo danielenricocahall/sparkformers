@@ -16,7 +16,6 @@ The project is currently in a beta/experimental state. While not yet production 
 **Generation**: Same as above, but with the `generate` method of the model.
 
 
-
 # Installation
 To install, you can simply run:
 ```bash
