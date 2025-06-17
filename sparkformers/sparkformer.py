@@ -1,3 +1,4 @@
+import logging
 import shutil
 import tempfile
 import uuid
@@ -26,6 +27,13 @@ from sparkformers.utils.hf_utils import pad_labels
 ModelState = dict[str, torch.Tensor]
 History = dict[str, float]
 StateAndHistory = tuple[ModelState, History]
+
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 class SparkFormer:
@@ -80,7 +88,7 @@ class SparkFormer:
                 averaged_history = {k: v / self.num_workers for k, v in history.items()}
                 self._master_network.load_state_dict(averaged_params)
                 self.training_histories.append(averaged_history)
-                print(
+                logger.info(
                     f"Epoch {epoch + 1}/{epochs} - Loss: {averaged_history['loss']:.4f}"
                 )
 
