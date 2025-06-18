@@ -12,6 +12,7 @@ dependencies = [
     "transformers<5.0.0",
     "pyspark<=4.0.0",
     "torch>=2.7.1",
+    "accelerate==1.7.0",
 ]
 
 
