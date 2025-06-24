@@ -1,3 +1,6 @@
+[![Build Status](https://github.com/danielenricocahall/sparkformers/actions/workflows/ci.yaml/badge.svg)](https://github.com/danielenricocahall/elephas/actions/workflows/ci.yaml/badge.svg)
+[![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/danielenricocahall/sparkformers/blob/master/LICENSE)
+[![Supported Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://img.shields.io/badge/python-3.10%20%7C%203.11-blue)
 # Overview
 ![img.png](https://raw.githubusercontent.com/danielenricocahall/sparkformers/main/logo.png)
 Welcome to Sparkformers, where we offer distributed training of [Transformers](https://github.com/huggingface/transformers) models on [Spark](https://spark.apache.org/)!
